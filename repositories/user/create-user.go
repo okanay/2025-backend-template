@@ -2,60 +2,57 @@ package UserRepository
 
 import (
 	"context"
-	"fmt"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/okanay/backend-template/types"
 	"github.com/okanay/backend-template/utils"
 )
 
-func (r *Repository) CreateUser(ctx context.Context, request types.UserCreateRequest) (types.User, error) {
-	defer utils.TimeTrack(time.Now(), "User -> Create User")
+// CreateUser, şifre ile yeni bir kullanıcı oluşturur.
+// Hem 'users' hem de 'user_details' tablolarına kayıt atar.
+func (r *Repository) CreateUser(ctx context.Context, data types.UserCreateRequest) (*types.User, error) {
+	// Şifreyi güvenli bir şekilde hash'le.
+	hashedPassword, err := utils.EncryptPassword(data.Password)
+	if err != nil {
+		return nil, err
+	}
 
-	// Transaction başlat
+	// Tüm işlemleri tek bir "atomik" paket olarak sarmak için transaction başlat.
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return types.User{}, fmt.Errorf("transaction başlatılamadı: %w", err)
+		return nil, err
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
+	defer tx.Rollback() // Hata olursa her şeyi geri al.
 
-	var user types.User
-	hashedPassword, err := utils.EncryptPassword(request.Password)
+	// 1. Yeni kullanıcıyı 'users' tablosuna ekle ve yeni ID'sini al.
+	var userID uuid.UUID
+	userQuery := `
+        INSERT INTO users (email, auth_provider, hashed_password, role, status)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+    `
+	err = tx.QueryRowContext(ctx, userQuery,
+		data.Email,
+		types.ProviderCredentials,
+		hashedPassword,
+		types.RoleUser,
+		types.UserStatusActive,
+	).Scan(&userID)
 	if err != nil {
-		return user, fmt.Errorf("şifre şifreleme hatası: %w", err)
+		return nil, err // E-posta zaten varsa, veritabanı hatası burada yakalanır.
 	}
 
-	query := `INSERT INTO users (email, username, hashed_password) VALUES ($1, $2, $3) RETURNING *`
-
-	// Context kontrolü ekle
-	if err := ctx.Err(); err != nil {
-		return user, fmt.Errorf("context iptal edildi: %w", err)
+	// 2. Yeni kullanıcıya ait boş bir 'user_details' kaydı oluştur.
+	detailsQuery := "INSERT INTO user_details (user_id) VALUES ($1)"
+	if _, err := tx.ExecContext(ctx, detailsQuery, userID); err != nil {
+		return nil, err
 	}
 
-	// Transaction içinde sorgu çalıştır
-	rows, err := tx.QueryContext(ctx, query, request.Email, request.Username, hashedPassword)
-	if err != nil {
-		return user, fmt.Errorf("kullanıcı oluşturma hatası: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return user, fmt.Errorf("kullanıcı oluşturuldu ancak veri döndürülemedi")
+	// 3. Her şey başarılıysa, transaction'ı onayla.
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
-	err = utils.ScanStructByDBTags(rows, &user)
-	if err != nil {
-		return user, fmt.Errorf("kullanıcı verileri okunamadı: %w", err)
-	}
-
-	// Transaction'ı commit et
-	if err = tx.Commit(); err != nil {
-		return user, fmt.Errorf("transaction commit hatası: %w", err)
-	}
-
-	return user, nil
+	// 4. Oluşturulan kullanıcının tam halini veritabanından çek ve döndür.
+	return r.SelectByID(ctx, userID)
 }

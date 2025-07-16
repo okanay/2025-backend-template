@@ -8,23 +8,13 @@ import (
 	"github.com/okanay/backend-template/utils"
 )
 
-func (r *Repository) UpdateRefreshTokenLastUsed(ctx context.Context, token string) error {
-	defer utils.TimeTrack(time.Now(), "Token -> Update Refresh Token Last Used")
+// UpdateRefreshTokenLastUsed, bir token'ın son kullanım zamanını günceller.
+func (r *Repository) UpdateRefreshTokenLastUsed(ctx context.Context, tokenStr string) error {
+	defer utils.TimeTrack(time.Now(), "Token -> UpdateRefreshTokenLastUsed")
 
-	// Context kontrolü
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("context iptal edildi: %w", err)
-	}
-
-	now := time.Now()
-	query := `UPDATE refresh_tokens SET last_used_at = $1 WHERE token = $2`
-
-	_, err := r.db.ExecContext(ctx, query, now, token)
-	if err != nil {
-		return fmt.Errorf("token güncelleme hatası: %w", err)
-	}
-
-	return nil
+	query := `UPDATE refresh_tokens SET last_used_at = NOW() WHERE token = $1`
+	_, err := r.db.ExecContext(ctx, query, tokenStr)
+	return err
 }
 
 func (r *Repository) ExtendRefreshTokenExpiry(ctx context.Context, token string, duration time.Duration) error {

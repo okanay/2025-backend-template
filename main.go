@@ -22,6 +22,7 @@ import (
 	tr "github.com/okanay/backend-template/repositories/token"
 	ur "github.com/okanay/backend-template/repositories/user"
 	gr "github.com/okanay/backend-template/services/github"
+	GothService "github.com/okanay/backend-template/services/goth"
 	r2r "github.com/okanay/backend-template/services/r2"
 
 	"github.com/okanay/backend-template/services/cache"
@@ -127,6 +128,7 @@ type Repositories struct {
 }
 
 type Services struct {
+	Goth   *GothService.Service
 	Cache  cache.CacheService
 	R2     *r2r.Service
 	Github *gr.Service
@@ -150,7 +152,10 @@ func initRepositories(sqlDB *sql.DB) Repositories {
 
 // initServices fonksiyonunu da güncelle
 func initServices() Services {
+	provider := GothService.SetupGothProviders()
+
 	return Services{
+		Goth:   GothService.NewService(provider),
 		Cache:  cache.NewCacheService(1 * time.Hour),
 		Github: gr.NewService(os.Getenv("GITHUB_OWNER"), os.Getenv("GITHUB_REPOSITORY_NAME"), os.Getenv("GITHUB_TOKEN")),
 		R2: r2r.NewService(

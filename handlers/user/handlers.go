@@ -3,16 +3,19 @@ package UserHandler
 import (
 	TokenRepository "github.com/okanay/backend-template/repositories/token"
 	UserRepository "github.com/okanay/backend-template/repositories/user"
+	GothService "github.com/okanay/backend-template/services/goth"
 )
 
 type Handler struct {
+	AuthService     *GothService.Service
 	UserRepository  *UserRepository.Repository
 	TokenRepository *TokenRepository.Repository
 }
 
-func NewHandler(u *UserRepository.Repository, t *TokenRepository.Repository) *Handler {
+func NewHandler(authService *GothService.Service, userRepository *UserRepository.Repository, tokenRepository *TokenRepository.Repository) *Handler {
 	return &Handler{
-		UserRepository:  u,
-		TokenRepository: t,
+		AuthService:     authService,
+		UserRepository:  userRepository,
+		TokenRepository: tokenRepository,
 	}
 }

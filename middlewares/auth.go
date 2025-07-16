@@ -1,3 +1,5 @@
+// middlewares/auth_middleware.go
+
 package middlewares
 
 import (
@@ -9,131 +11,113 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/okanay/backend-template/configs"
-	TokenRepository "github.com/okanay/backend-template/repositories/token"
-	UserRepository "github.com/okanay/backend-template/repositories/user"
+	tokenRepo "github.com/okanay/backend-template/repositories/token"
+	userRepo "github.com/okanay/backend-template/repositories/user"
 	"github.com/okanay/backend-template/types"
 	"github.com/okanay/backend-template/utils"
 )
 
-func AuthMiddleware(ur *UserRepository.Repository, tr *TokenRepository.Repository) gin.HandlerFunc {
+// AuthMiddleware, gelen isteklerde kimlik doğrulama yapar.
+// Önce Access Token'ı kontrol eder, geçersizse Refresh Token ile yenilemeye çalışır.
+func AuthMiddleware(uRepo *userRepo.Repository, tRepo *tokenRepo.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 1. Access token'ı cookie'den oku.
 		accessToken, err := c.Cookie(configs.ACCESS_TOKEN_NAME)
-
 		if err != nil {
-			handleTokenRenewal(c, ur, tr)
+			// Access token yoksa, doğrudan yenileme sürecine geç.
+			handleTokenRenewal(c, uRepo, tRepo)
 			return
 		}
 
+		// 2. Access token'ı doğrula.
 		claims, err := utils.ValidateAccessToken(accessToken)
 		if err != nil {
+			// Token süresi dolmuşsa, yenileme sürecine geç.
 			if errors.Is(err, jwt.ErrTokenExpired) {
-				handleTokenRenewal(c, ur, tr)
+				handleTokenRenewal(c, uRepo, tRepo)
 				return
 			}
-
-			handleUnauthorized(c, "Invalid session token.")
+			// Diğer geçersiz token hataları için yetkisiz yanıtı dön.
+			handleUnauthorized(c, "Invalid or malformed access token.")
 			return
 		}
 
-		setContextValues(c, claims.ID, claims.Username, claims.Email, claims.Role, claims.EmailVerified, claims.Status, claims.CreatedAt, claims.LastLogin)
-
+		// 3. Token geçerliyse, kullanıcı kimliğini context'e ekle ve devam et.
+		setContextValues(c, claims.ID, claims.Role)
 		c.Next()
 	}
 }
 
-func handleTokenRenewal(c *gin.Context, ur *UserRepository.Repository, tr *TokenRepository.Repository) {
-	defer utils.TimeTrack(time.Now(), "Token -> Renewal User Token")
+// handleTokenRenewal, refresh token kullanarak yeni bir access token üretir.
+func handleTokenRenewal(c *gin.Context, uRepo *userRepo.Repository, tRepo *tokenRepo.Repository) {
+	defer utils.TimeTrack(time.Now(), "Auth -> handleTokenRenewal")
 
+	// 1. Refresh token'ı cookie'den oku.
 	refreshToken, err := c.Cookie(configs.REFRESH_TOKEN_NAME)
 	if err != nil {
-		handleUnauthorized(c, "Session not found.")
+		handleUnauthorized(c, "Session not found. Please log in.")
 		return
 	}
 
-	dbToken, err := tr.SelectRefreshTokenByToken(c, refreshToken)
+	// 2. Refresh token'ın veritabanında geçerli olup olmadığını kontrol et.
+	// SelectRefreshTokenByToken fonksiyonu süresi dolmuş ve iptal edilmişleri zaten eler.
+	dbToken, err := tRepo.SelectRefreshTokenByToken(c.Request.Context(), refreshToken)
 	if err != nil {
-		handleUnauthorized(c, "Invalid session.")
+		handleUnauthorized(c, "Invalid session. Please log in again.")
 		return
 	}
 
-	if dbToken.IsRevoked {
-		handleUnauthorized(c, "Session has been revoked.")
-		return
-	}
-
-	if dbToken.ExpiresAt.Before(time.Now()) {
-		handleUnauthorized(c, "Session has expired.")
-		return
-	}
-
-	user, err := ur.SelectByUsername(c, dbToken.UserUsername)
+	// 3. Token'a bağlı kullanıcıyı bul ve durumunu kontrol et (hesap askıya alınmış mı vb.).
+	user, err := uRepo.SelectByID(c.Request.Context(), dbToken.UserID)
 	if err != nil {
-		handleUnauthorized(c, "User not found.")
+		handleUnauthorized(c, "User associated with the session not found.")
 		return
 	}
-
 	if user.Status != types.UserStatusActive {
 		handleUnauthorized(c, "Your account is not active.")
 		return
 	}
 
-	tokenClaims := types.TokenClaims{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-		Role:     user.Role,
+	// 4. Yeni bir Access Token için minimal 'claims' oluştur.
+	// En güncel rol bilgisini doğrudan veritabanından gelen 'user' objesinden alıyoruz.
+	newClaims := types.TokenClaims{
+		ID:   user.ID,
+		Role: user.Role,
 	}
 
-	newAccessToken, err := utils.GenerateAccessToken(tokenClaims)
+	newAccessToken, err := utils.GenerateAccessToken(newClaims)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "token_generation_failed",
-			"message": "An error occurred while renewing the session.",
-		})
-		c.Abort()
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "token_generation_failed"})
 		return
 	}
 
-	err = tr.UpdateRefreshTokenLastUsed(c, refreshToken)
-	if err != nil {
-	}
+	// 5. (Opsiyonel ama önerilen) Refresh token'ın son kullanım zamanını güncelle.
+	go tRepo.UpdateRefreshTokenLastUsed(c.Request.Context(), refreshToken)
 
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(
-		configs.ACCESS_TOKEN_NAME,
-		newAccessToken,
-		int(configs.ACCESS_TOKEN_DURATION.Seconds()),
-		"/",
-		"",
-		false,
-		true,
-	)
+	// 6. Yeni access token'ı ve mevcut refresh token'ı merkezi bir fonksiyonla cookie'ye yaz.
+	// Refresh token'ı tekrar yazmak, cookie'nin ömrünü tarayıcıda da uzatır.
+	utils.SetAuthCookies(c, newAccessToken, refreshToken)
 
-	setContextValues(c, user.ID, user.Username, user.Email, user.Role, user.EmailVerified, user.Status, user.CreatedAt, user.LastLogin)
+	// 7. Kullanıcı kimliğini context'e ekle ve isteğin devam etmesini sağla.
+	setContextValues(c, user.ID, user.Role)
 	c.Next()
 }
 
+// handleUnauthorized, yetkisiz durumlarda cookie'leri temizler ve 401 yanıtı döner.
 func handleUnauthorized(c *gin.Context, message string) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(configs.ACCESS_TOKEN_NAME, "", -1, "/", "", false, true)
-	c.SetCookie(configs.REFRESH_TOKEN_NAME, "", -1, "/", "", false, true)
+	// Merkezi cookie temizleme fonksiyonunu kullan.
+	utils.ClearAuthCookies(c)
 
-	c.JSON(http.StatusUnauthorized, gin.H{
+	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 		"success": false,
 		"error":   "unauthorized",
 		"message": message,
 	})
-	c.Abort()
 }
 
-func setContextValues(c *gin.Context, userID uuid.UUID, username string, email string, role types.Role, emailVerified bool, status types.UserStatus, createdAt time.Time, lastLogin time.Time) {
+// setContextValues, doğrulanmış kullanıcı kimliğini sonraki handler'ların
+// kullanabilmesi için Gin context'ine ekler.
+func setContextValues(c *gin.Context, userID uuid.UUID, role types.Role) {
 	c.Set("user_id", userID)
-	c.Set("username", username)
-	c.Set("email", email)
-	c.Set("role", role)
-	c.Set("email_verified", emailVerified)
-	c.Set("status", status)
-	c.Set("created_at", createdAt)
-	c.Set("last_login", lastLogin)
+	c.Set("user_role", role)
 }

@@ -2,7 +2,6 @@ package TokenRepository
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -11,68 +10,53 @@ import (
 	"github.com/okanay/backend-template/utils"
 )
 
-func (r *Repository) SelectRefreshTokenByToken(ctx context.Context, token string) (types.RefreshToken, error) {
-	defer utils.TimeTrack(time.Now(), "Token -> Select Refresh Token By Token")
+// SelectRefreshTokenByToken, bir token dizesine göre geçerli (iptal edilmemiş ve süresi dolmamış) token'ı bulur.
+func (r *Repository) SelectRefreshTokenByToken(ctx context.Context, tokenStr string) (*types.RefreshToken, error) {
+	defer utils.TimeTrack(time.Now(), "Token -> SelectRefreshTokenByToken")
 
 	var refreshToken types.RefreshToken
+	// GÜNCELLEME: Sorgu, son kullanma ve iptal durumunu da kontrol ederek daha güvenli hale getirildi.
+	query := `
+        SELECT id, user_id, user_email, token, ip_address, user_agent, expires_at, created_at, last_used_at, is_revoked, revoked_reason
+        FROM refresh_tokens
+        WHERE token = $1 AND is_revoked = FALSE AND expires_at > NOW()
+        LIMIT 1`
 
-	// Context kontrolü
-	if err := ctx.Err(); err != nil {
-		return refreshToken, fmt.Errorf("context iptal edildi: %w", err)
-	}
+	err := r.db.QueryRowContext(ctx, query, tokenStr).Scan(
+		&refreshToken.ID, &refreshToken.UserID, &refreshToken.UserEmail, &refreshToken.Token, &refreshToken.IPAddress, &refreshToken.UserAgent,
+		&refreshToken.ExpiresAt, &refreshToken.CreatedAt, &refreshToken.LastUsedAt, &refreshToken.IsRevoked, &refreshToken.RevokedReason,
+	)
 
-	query := `SELECT * FROM refresh_tokens WHERE token = $1 AND is_revoked = FALSE`
-
-	rows, err := r.db.QueryContext(ctx, query, token)
 	if err != nil {
-		return refreshToken, fmt.Errorf("token sorgulanırken hata: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return refreshToken, fmt.Errorf("token bulunamadı")
-	}
-
-	err = utils.ScanStructByDBTags(rows, &refreshToken)
-	if err != nil {
-		return refreshToken, fmt.Errorf("token verileri okunurken hata: %w", err)
-	}
-
-	return refreshToken, nil
+	return &refreshToken, nil
 }
 
+// SelectActiveTokensByUserID, bir kullanıcıya ait tüm aktif oturumları listeler.
 func (r *Repository) SelectActiveTokensByUserID(ctx context.Context, userID uuid.UUID) ([]types.RefreshToken, error) {
-	defer utils.TimeTrack(time.Now(), "Token -> Select Active Tokens By User ID")
+	defer utils.TimeTrack(time.Now(), "Token -> SelectActiveTokensByUserID")
 
-	var tokens []types.RefreshToken
-
-	// Context kontrolü
-	if err := ctx.Err(); err != nil {
-		return tokens, fmt.Errorf("context iptal edildi: %w", err)
-	}
-
-	query := `SELECT * FROM refresh_tokens
-              WHERE user_id = $1 AND is_revoked = FALSE AND expires_at > NOW()`
+	query := `
+        SELECT id, user_id, user_email, token, ip_address, user_agent, expires_at, created_at, last_used_at
+        FROM refresh_tokens
+        WHERE user_id = $1 AND is_revoked = FALSE AND expires_at > NOW()
+        ORDER BY last_used_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {
-		return tokens, fmt.Errorf("token sorgu hatası: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
+	var tokens []types.RefreshToken
 	for rows.Next() {
 		var token types.RefreshToken
-		if err := utils.ScanStructByDBTags(rows, &token); err != nil {
-			// Hata logla ve devam et
-			log.Printf("Token tarama hatası: %v", err)
+		if err := rows.Scan(&token.ID, &token.UserID, &token.UserEmail, &token.Token, &token.IPAddress, &token.UserAgent, &token.ExpiresAt, &token.CreatedAt, &token.LastUsedAt); err != nil {
+			log.Printf("Token tarama hatası (SelectActiveTokensByUserID): %v", err)
 			continue
 		}
 		tokens = append(tokens, token)
 	}
-
-	if err = rows.Err(); err != nil {
-		return tokens, fmt.Errorf("token tarama hatası: %w", err)
-	}
-
-	return tokens, nil
+	return tokens, rows.Err()
 }

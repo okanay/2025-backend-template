@@ -2,40 +2,33 @@ package UserRepository
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/okanay/backend-template/types"
-	"github.com/okanay/backend-template/utils"
 )
 
-func (r *Repository) SelectByID(ctx context.Context, id uuid.UUID) (types.User, error) {
-	defer utils.TimeTrack(time.Now(), "User -> Select User By ID")
-
+// SelectByID, bir kullanıcıyı ID'sine göre bulur.
+func (r *Repository) SelectByID(ctx context.Context, id uuid.UUID) (*types.User, error) {
 	var user types.User
-
 	query := `SELECT * FROM users WHERE id = $1 LIMIT 1`
 
-	// Context kontrolü
-	if err := ctx.Err(); err != nil {
-		return user, fmt.Errorf("context iptal edildi: %w", err)
-	}
-
-	rows, err := r.db.QueryContext(ctx, query, id)
+	// Veritabanı sorgusunu çalıştır ve sonucu 'user' struct'ına tara.
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&user.ID,
+		&user.Email,
+		&user.AuthProvider,
+		&user.HashedPassword,
+		&user.Role,
+		&user.EmailVerified,
+		&user.Status,
+		&user.DeletedAt,
+		&user.CreatedAt,
+		&user.LastLogin,
+		&user.UpdatedAt,
+	)
 	if err != nil {
-		return user, fmt.Errorf("kullanıcı sorgu hatası: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return user, fmt.Errorf("kullanıcı bulunamadı")
+		return nil, err // Kullanıcı bulunamazsa veya başka bir hata olursa.
 	}
 
-	err = utils.ScanStructByDBTags(rows, &user)
-	if err != nil {
-		return user, fmt.Errorf("kullanıcı verileri okunamadı: %w", err)
-	}
-
-	return user, nil
+	return &user, nil
 }

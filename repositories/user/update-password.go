@@ -2,45 +2,33 @@ package UserRepository
 
 import (
 	"context"
-	"fmt"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/okanay/backend-template/utils"
 )
 
-func (r *Repository) UpdatePassword(ctx context.Context, email string, password string) error {
-	defer utils.TimeTrack(time.Now(), "User -> Update Password")
-
-	// Transaction başlat
-	tx, err := r.db.BeginTx(ctx, nil)
+// UpdatePassword, bir kullanıcının şifresini günceller.
+func (r *Repository) UpdatePassword(ctx context.Context, userID uuid.UUID, newPassword string) error {
+	// Yeni şifreyi güvenli bir şekilde hash'le.
+	hashedPassword, err := utils.EncryptPassword(newPassword)
 	if err != nil {
-		return fmt.Errorf("transaction başlatılamadı: %w", err)
+		return err
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
 
-	hash, err := utils.EncryptPassword(password)
+	// Veritabanında güncelleme yap.
+	query := "UPDATE users SET hashed_password = $1 WHERE id = $2"
+	result, err := r.db.ExecContext(ctx, query, hashedPassword, userID)
 	if err != nil {
-		return fmt.Errorf("şifre şifreleme hatası: %w", err)
+		return err
 	}
 
-	// Context kontrolü
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("context iptal edildi: %w", err)
-	}
-
-	query := `UPDATE users SET hashed_password=$1, updated_at=$2 WHERE email=$3`
-	_, err = tx.ExecContext(ctx, query, hash, time.Now(), email)
+	// Güncellemenin gerçekten bir satırı etkilediğinden emin ol.
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("şifre güncelleme hatası: %w", err)
+		return err
 	}
-
-	// Transaction'ı commit et
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("transaction commit hatası: %w", err)
+	if rowsAffected == 0 {
+		return nil
 	}
 
 	return nil

@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"time"
 
@@ -16,25 +18,28 @@ type JWTClaims struct {
 	types.TokenClaims
 }
 
+// GenerateAccessToken, verilen minimal 'claims' ile yeni bir Access Token oluşturur.
 func GenerateAccessToken(claims types.TokenClaims) (string, error) {
 	secretKey := os.Getenv("JWT_ACCESS_SECRET")
 	if secretKey == "" {
-		return "", errors.New("JWT_ACCESS_SECRET environment variable is not set")
+		return "", errors.New("JWT_ACCESS_SECRET environment variable not set")
 	}
 
+	// Token'ın geçerlilik süresini ve diğer standart talepleri ayarla.
+	// 'Subject' olarak artık 'Email' yerine 'ID' kullanmak daha doğru ve güvenlidir.
 	tokenClaims := JWTClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(configs.ACCESS_TOKEN_DURATION)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 			Issuer:    configs.JWT_ISSUER,
-			Subject:   claims.Email,
+			Subject:   claims.ID.String(), // Konu olarak User ID kullanılıyor.
 		},
-		TokenClaims: claims,
+		TokenClaims: claims, // types.TokenClaims { ID, Role }
 	}
 
+	// Token'ı imzala.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, tokenClaims)
-
 	signedToken, err := token.SignedString([]byte(secretKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to sign token: %w", err)
@@ -46,7 +51,7 @@ func GenerateAccessToken(claims types.TokenClaims) (string, error) {
 func ValidateAccessToken(tokenString string) (*types.TokenClaims, error) {
 	secretKey := os.Getenv("JWT_ACCESS_SECRET")
 	if secretKey == "" {
-		return nil, errors.New("JWT_ACCESS_SECRET environment variable is not set")
+		return nil, errors.New("JWT_ACCESS_SECRET environment variable not set")
 	}
 
 	claims := &JWTClaims{}
@@ -58,12 +63,12 @@ func ValidateAccessToken(tokenString string) (*types.TokenClaims, error) {
 		return []byte(secretKey), nil
 	})
 
+	// Hata kontrolü ve token geçerliliği kontrolü.
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse or validate token: %w", err)
+		return nil, err // Hata, token'ın süresinin dolduğunu da içerebilir (jwt.ErrTokenExpired).
 	}
-
 	if !token.Valid {
-		return nil, errors.New("token parsed but marked as invalid")
+		return nil, errors.New("token is not valid")
 	}
 
 	return &claims.TokenClaims, nil
@@ -158,8 +163,17 @@ func ExtractClaims(tokenString string) (*types.TokenClaims, error) {
 	return nil, errors.New("invalid claims format")
 }
 
-func GenerateRefreshToken() string {
-	return GenerateRandomString(configs.REFRESH_TOKEN_LENGTH)
+func GenerateRefreshToken() (string, error) {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, configs.REFRESH_TOKEN_LENGTH)
+	for i := range b {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			return "", err
+		}
+		b[i] = alphabet[num.Int64()]
+	}
+	return string(b), nil
 }
 
 func ShouldRefreshToken(tokenString string) (bool, error) {
@@ -181,7 +195,7 @@ func ShouldRefreshToken(tokenString string) (bool, error) {
 	expiresAt := claims.ExpiresAt.Time
 	issuedAt := claims.IssuedAt.Time
 	totalDuration := expiresAt.Sub(issuedAt)
-	remainingDuration := expiresAt.Sub(time.Now())
+	remainingDuration := time.Until(expiresAt)
 
 	return remainingDuration < (totalDuration / 4), nil
 }

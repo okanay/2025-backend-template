@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserStatus - user status enum type
+// Enum Tipleri
 type UserStatus string
 
 const (
@@ -15,7 +15,6 @@ const (
 	UserStatusDeleted   UserStatus = "Deleted"
 )
 
-// Role - user role enum type
 type Role string
 
 const (
@@ -24,42 +23,73 @@ const (
 	RoleAdmin  Role = "Admin"
 )
 
-// Table Model (database/migrations/00001.auth.up.sql)
+type AuthProvider string
+
+const (
+	ProviderCredentials AuthProvider = "Credentials"
+	ProviderGoogle      AuthProvider = "Google"
+)
+
+// --- Veritabanı Modelleri ---
 type User struct {
-	ID             uuid.UUID  `db:"id" json:"id"`
-	Email          string     `db:"email" json:"email"`
-	Username       string     `db:"username" json:"username"`
-	HashedPassword string     `db:"hashed_password" json:"-"`
-	Role           Role       `db:"role" json:"role"`
-	EmailVerified  bool       `db:"email_verified" json:"emailVerified"`
-	Status         UserStatus `db:"status" json:"status"`
-	DeletedAt      *time.Time `db:"deleted_at" json:"deletedAt,omitempty"`
-	CreatedAt      time.Time  `db:"created_at" json:"createdAt"`
-	LastLogin      time.Time  `db:"last_login" json:"lastLogin"`
-	UpdatedAt      time.Time  `db:"updated_at" json:"updatedAt"`
+	ID             uuid.UUID    `db:"id"`
+	Email          string       `db:"email"`
+	AuthProvider   AuthProvider `db:"auth_provider"`
+	HashedPassword *string      `db:"hashed_password"`
+	Role           Role         `db:"role"`
+	EmailVerified  bool         `db:"email_verified"`
+	Status         UserStatus   `db:"status"`
+	DeletedAt      *time.Time   `db:"deleted_at"`
+	CreatedAt      time.Time    `db:"created_at"`
+	LastLogin      time.Time    `db:"last_login"`
+	UpdatedAt      time.Time    `db:"updated_at"`
 }
 
-// UserView - secure model to return user profile
+type UserDetails struct {
+	ID               uuid.UUID `db:"id"`
+	UserID           uuid.UUID `db:"user_id"`
+	ProviderID       *string   `db:"provider_id"`
+	DisplayName      *string   `db:"display_name"`
+	FirstName        *string   `db:"first_name"`
+	LastName         *string   `db:"last_name"`
+	AvatarURL        *string   `db:"avatar_url"`
+	PhoneE164        *string   `db:"phone_e164"`
+	PhoneCountryCode *string   `db:"phone_country_code"`
+	CreatedAt        time.Time `db:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at"`
+}
+
+// --- API Modelleri ---
 type UserView struct {
-	ID            uuid.UUID  `json:"id"`
-	Username      string     `json:"username"`
-	Email         string     `json:"email"`
-	Role          Role       `json:"role"`
-	EmailVerified bool       `json:"emailVerified"`
-	Status        UserStatus `json:"status"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	LastLogin     time.Time  `json:"lastLogin"`
+	ID            uuid.UUID `json:"id"`
+	Role          Role      `json:"role"`
+	Email         string    `json:"email"`
+	EmailVerified bool      `json:"emailVerified"`
+	DisplayName   *string   `json:"displayName,omitempty"`
+	AvatarURL     *string   `json:"avatarUrl,omitempty"`
 }
 
-// UserCreateRequest - user creation request
+type ProviderUserData struct {
+	Provider    AuthProvider
+	ProviderID  string
+	Email       string
+	DisplayName string
+	FirstName   string
+	LastName    string
+	AvatarURL   string
+}
+
 type UserCreateRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=6"`
 }
 
-// UserLoginRequest - user login request
+type LoginResponse struct {
+	User        UserView     `json:"user"`
+	Permissions []Permission `json:"permissions"`
+}
+
 type UserLoginRequest struct {
-	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
