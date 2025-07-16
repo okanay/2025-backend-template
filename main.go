@@ -94,6 +94,13 @@ func main() {
 	publicAPI.POST("/register", handlers.User.Register)
 	publicAPI.GET("/test-ip-address", handlers.Main.IPTestEndpoint)
 
+	// --- OAUTH PROVIDER AUTH ---
+	// Gothic middleware'i ekleyebilirsiniz (isteğe bağlı)
+	oauthAPI := publicAPI.Group("/auth")
+	// oauthAPI.Use(middlewares.GothicMiddleware()) // İsteğe bağlı
+	oauthAPI.GET("/:provider", handlers.User.ProviderHandler)          // Provider'a yönlendirme
+	oauthAPI.GET("/:provider/callback", handlers.User.CallbackHandler) // Provider callback
+
 	// --- PUBLIC FILES ---
 	publicFileAPI.Use(turnstileMiddleware.Middleware())
 	publicFileAPI.POST("/presigned-url", handlers.File.CreatePresignedURL)
@@ -110,12 +117,12 @@ func main() {
 	authAPI.DELETE("/files/:id", handlers.File.DeleteFile)
 
 	// --- AUTH DOCUMENTS ---
-	publicAPI.GET("/content/categories", handlers.GithubFileManager.GetCategories)
-	publicAPI.GET("/content/:category", handlers.GithubFileManager.GetContent)
-	publicAPI.POST("/content/:category/save", handlers.GithubFileManager.SaveContent)
-	publicAPI.GET("/content/:category/draft-status", handlers.GithubFileManager.GetDraftStatus)
-	publicAPI.POST("/content/:category/publish", handlers.GithubFileManager.PublishCategory)
-	publicAPI.DELETE("/content/:category/restart", handlers.GithubFileManager.RestartCategory)
+	authAPI.GET("/content/categories", handlers.GithubFileManager.GetCategories)
+	authAPI.GET("/content/:category", handlers.GithubFileManager.GetContent)
+	authAPI.POST("/content/:category/save", handlers.GithubFileManager.SaveContent)
+	authAPI.GET("/content/:category/draft-status", handlers.GithubFileManager.GetDraftStatus)
+	authAPI.POST("/content/:category/publish", handlers.GithubFileManager.PublishCategory)
+	authAPI.DELETE("/content/:category/restart", handlers.GithubFileManager.RestartCategory)
 
 	// 5. Sunucuyu Başlat
 	startServer(router)
@@ -152,10 +159,10 @@ func initRepositories(sqlDB *sql.DB) Repositories {
 
 // initServices fonksiyonunu da güncelle
 func initServices() Services {
-	provider := GothService.SetupGothProviders()
+	GothService.SetupGothProviders()
 
 	return Services{
-		Goth:   GothService.NewService(provider),
+		Goth:   GothService.NewService(),
 		Cache:  cache.NewCacheService(1 * time.Hour),
 		Github: gr.NewService(os.Getenv("GITHUB_OWNER"), os.Getenv("GITHUB_REPOSITORY_NAME"), os.Getenv("GITHUB_TOKEN")),
 		R2: r2r.NewService(
@@ -174,7 +181,7 @@ func initServices() Services {
 func initHandlers(repos Repositories, services Services) Handlers {
 	return Handlers{
 		Main:              mh.NewHandler(),
-		User:              uh.NewHandler(repos.User, repos.Token),
+		User:              uh.NewHandler(services.Goth, repos.User, repos.Token),
 		File:              fh.NewHandler(repos.File, services.R2),
 		GithubFileManager: gfm.NewHandler(services.Github),
 	}

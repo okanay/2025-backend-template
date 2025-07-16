@@ -1,223 +1,223 @@
-name: Daily Analytics Report
+# name: Daily Analytics Report
 
-on:
-  schedule:
-    - cron: "0 9 * * *" # Her gün saat 09:00 (Türkiye saati 12:00)
-  workflow_dispatch: # Manuel test için
+# on:
+#   schedule:
+#     - cron: "0 9 * * *" # Her gün saat 09:00 (Türkiye saati 12:00)
+#   workflow_dispatch: # Manuel test için
 
-jobs:
-  generate-report:
-    runs-on: ubuntu-latest
+# jobs:
+#   generate-report:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Generate Daily Analytics Report
-        uses: appleboy/ssh-action@v0.1.5
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.PRIVATE_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
-          port: 22
-          script: |
-            echo "📊 Generating Daily Analytics Report - $(date '+%Y-%m-%d')"
-            echo "========================================================"
+#     steps:
+#       - name: Generate Daily Analytics Report
+#         uses: appleboy/ssh-action@v0.1.5
+#         with:
+#           host: ${{ secrets.HOST }}
+#           username: ${{ secrets.USERNAME }}
+#           key: ${{ secrets.PRIVATE_KEY }}
+#           passphrase: ${{ secrets.PASSPHRASE }}
+#           port: 22
+#           script: |
+#             echo "📊 Generating Daily Analytics Report - $(date '+%Y-%m-%d')"
+#             echo "========================================================"
 
-            # Bugünün tarihini al
-            TODAY=$(date '+%Y-%m-%d')
+#             # Bugünün tarihini al
+#             TODAY=$(date '+%Y-%m-%d')
 
-            echo "📅 Report Date: $TODAY"
-            echo "🕐 Report Time: $(date '+%H:%M:%S %Z')"
-            echo ""
+#             echo "📅 Report Date: $TODAY"
+#             echo "🕐 Report Time: $(date '+%H:%M:%S %Z')"
+#             echo ""
 
-            # 1. GENEL İSTATİSTİKLER
-            echo "📈 DAILY STATISTICS"
-            echo "==================="
+#             # 1. GENEL İSTATİSTİKLER
+#             echo "📈 DAILY STATISTICS"
+#             echo "==================="
 
-            # Toplam request sayısı
-            TOTAL_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "GET\|POST\|PUT\|DELETE\|PATCH" )
-            echo "🔢 Total Requests: $TOTAL_REQUESTS"
+#             # Toplam request sayısı
+#             TOTAL_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "GET\|POST\|PUT\|DELETE\|PATCH" )
+#             echo "🔢 Total Requests: $TOTAL_REQUESTS"
 
-            # GET requests
-            GET_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "GET" )
-            echo "🔍 GET Requests: $GET_REQUESTS"
+#             # GET requests
+#             GET_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "GET" )
+#             echo "🔍 GET Requests: $GET_REQUESTS"
 
-            # POST requests
-            POST_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "POST" )
-            echo "📝 POST Requests: $POST_REQUESTS"
+#             # POST requests
+#             POST_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "POST" )
+#             echo "📝 POST Requests: $POST_REQUESTS"
 
-            # PUT/PATCH requests
-            UPDATE_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -E "PUT|PATCH" )
-            echo "✏️ Update Requests (PUT/PATCH): $UPDATE_REQUESTS"
+#             # PUT/PATCH requests
+#             UPDATE_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -E "PUT|PATCH" )
+#             echo "✏️ Update Requests (PUT/PATCH): $UPDATE_REQUESTS"
 
-            # DELETE requests
-            DELETE_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "DELETE" )
-            echo "🗑️ DELETE Requests: $DELETE_REQUESTS"
+#             # DELETE requests
+#             DELETE_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "DELETE" )
+#             echo "🗑️ DELETE Requests: $DELETE_REQUESTS"
 
-            echo ""
+#             echo ""
 
-            # 2. STATUS CODE ANALİZİ
-            echo "📊 HTTP STATUS CODES"
-            echo "===================="
+#             # 2. STATUS CODE ANALİZİ
+#             echo "📊 HTTP STATUS CODES"
+#             echo "===================="
 
-            # 200 (Success)
-            SUCCESS_200=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 200 |" )
-            echo "✅ 200 Success: $SUCCESS_200"
+#             # 200 (Success)
+#             SUCCESS_200=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 200 |" )
+#             echo "✅ 200 Success: $SUCCESS_200"
 
-            # 201 (Created)
-            CREATED_201=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 201 |" )
-            echo "🆕 201 Created: $CREATED_201"
+#             # 201 (Created)
+#             CREATED_201=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 201 |" )
+#             echo "🆕 201 Created: $CREATED_201"
 
-            # 400 (Bad Request)
-            BAD_REQUEST_400=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 400 |" )
-            echo "⚠️ 400 Bad Request: $BAD_REQUEST_400"
+#             # 400 (Bad Request)
+#             BAD_REQUEST_400=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 400 |" )
+#             echo "⚠️ 400 Bad Request: $BAD_REQUEST_400"
 
-            # 401 (Unauthorized)
-            UNAUTHORIZED_401=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 401 |" )
-            echo "🔒 401 Unauthorized: $UNAUTHORIZED_401"
+#             # 401 (Unauthorized)
+#             UNAUTHORIZED_401=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 401 |" )
+#             echo "🔒 401 Unauthorized: $UNAUTHORIZED_401"
 
-            # 404 (Not Found)
-            NOT_FOUND_404=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 404 |" )
-            echo "❌ 404 Not Found: $NOT_FOUND_404"
+#             # 404 (Not Found)
+#             NOT_FOUND_404=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 404 |" )
+#             echo "❌ 404 Not Found: $NOT_FOUND_404"
 
-            # 500 (Server Error)
-            SERVER_ERROR_500=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 500 |" )
-            echo "🚨 500 Server Error: $SERVER_ERROR_500"
+#             # 500 (Server Error)
+#             SERVER_ERROR_500=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 500 |" )
+#             echo "🚨 500 Server Error: $SERVER_ERROR_500"
 
-            echo ""
+#             echo ""
 
-            # 3. EN POPÜLER ENDPOINT'LER
-            echo "🔥 TOP ENDPOINTS (Today)"
-            echo "========================"
+#             # 3. EN POPÜLER ENDPOINT'LER
+#             echo "🔥 TOP ENDPOINTS (Today)"
+#             echo "========================"
 
-            # GET endpoints (top 10)
-            sudo journalctl -u backend-template-api --since today --no-pager | \
-            grep "GET" | \
-            grep -o "GET[[:space:]]*[^[:space:]]*" | \
-            sort | uniq -c | sort -rn | head -10 | \
-            while read count endpoint; do
-                echo "📍 $endpoint: $count requests"
-            done
+#             # GET endpoints (top 10)
+#             sudo journalctl -u backend-template-api --since today --no-pager | \
+#             grep "GET" | \
+#             grep -o "GET[[:space:]]*[^[:space:]]*" | \
+#             sort | uniq -c | sort -rn | head -10 | \
+#             while read count endpoint; do
+#                 echo "📍 $endpoint: $count requests"
+#             done
 
-            echo ""
-            # 4. IP ADRESLERİ (Unique visitors)
-            echo "👥 IP ADDRESSES"
-            echo "======================"
+#             echo ""
+#             # 4. IP ADRESLERİ (Unique visitors)
+#             echo "👥 IP ADDRESSES"
+#             echo "======================"
 
-            # Unique IP sayısını bul
-            UNIQUE_IPS=$(sudo journalctl -u backend-template-api --since today --no-pager | \
-                grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
-                sort -u | wc -l)
-            echo "🌐 Unique IP Addresses: $UNIQUE_IPS"
+#             # Unique IP sayısını bul
+#             UNIQUE_IPS=$(sudo journalctl -u backend-template-api --since today --no-pager | \
+#                 grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
+#                 sort -u | wc -l)
+#             echo "🌐 Unique IP Addresses: $UNIQUE_IPS"
 
-            # En çok istek atan ilk 5 IP adresini göster
-            echo ""
-            echo "🔝 TOP 5 IP ADDRESSES:"
-            sudo journalctl -u backend-template-api --since today --no-pager | \
-                grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
-                sort | uniq -c | sort -rn | head -5 | \
-                awk '{printf "🏠 %s: %s requests\n", $2, $1}'
+#             # En çok istek atan ilk 5 IP adresini göster
+#             echo ""
+#             echo "🔝 TOP 5 IP ADDRESSES:"
+#             sudo journalctl -u backend-template-api --since today --no-pager | \
+#                 grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
+#                 sort | uniq -c | sort -rn | head -5 | \
+#                 awk '{printf "🏠 %s: %s requests\n", $2, $1}'
 
-            echo ""
+#             echo ""
 
-            # 5. RESPONSE TIME ANALYSIS (Gin log formatına göre düzeltildi)
-            echo "⏱️  RESPONSE TIME ANALYSIS"
-            echo "========================="
+#             # 5. RESPONSE TIME ANALYSIS (Gin log formatına göre düzeltildi)
+#             echo "⏱️  RESPONSE TIME ANALYSIS"
+#             echo "========================="
 
-            # Microsecond responses (µs)
-            MICRO_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "µs |" )
-            # Millisecond responses (ms)
-            MS_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "ms |" )
-            # Second responses (s) - eğer varsa
-            SEC_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -E "[0-9]+s \|" )
+#             # Microsecond responses (µs)
+#             MICRO_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "µs |" )
+#             # Millisecond responses (ms)
+#             MS_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "ms |" )
+#             # Second responses (s) - eğer varsa
+#             SEC_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -E "[0-9]+s \|" )
 
-            echo "Microsecond responses (µs): $MICRO_RESPONSES ⚡"
-            echo "Millisecond responses (ms): $MS_RESPONSES 🏃"
-            echo "Second responses (s): $SEC_RESPONSES 🐌"
+#             echo "Microsecond responses (µs): $MICRO_RESPONSES ⚡"
+#             echo "Millisecond responses (ms): $MS_RESPONSES 🏃"
+#             echo "Second responses (s): $SEC_RESPONSES 🐌"
 
-            # Average response time hesapla (sadece ms'ları al)
-            echo ""
-            echo "📊 Response Time Details:"
+#             # Average response time hesapla (sadece ms'ları al)
+#             echo ""
+#             echo "📊 Response Time Details:"
 
-            # Tüm ms cinsinden response sürelerini al ve average hesapla
-            RESPONSE_TIMES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep "ms |" | grep -o "[0-9]\+\.[0-9]\+ms" | sed 's/ms//g')
-            if [ -n "$RESPONSE_TIMES" ]; then
-                TOTAL=0
-                COUNT=0
-                for t in $RESPONSE_TIMES; do
-                    TOTAL=$(echo "$TOTAL + $t" | bc)
-                    COUNT=$((COUNT + 1))
-                done
-                if [ "$COUNT" -gt 0 ]; then
-                    AVG=$(echo "scale=2; $TOTAL / $COUNT" | bc)
-                    echo "   📈 Average Response Time (ms): $AVG"
-                else
-                    echo "   📈 Average Response Time (ms): N/A"
-                fi
-            else
-                echo "   📈 Average Response Time (ms): N/A"
-            fi
+#             # Tüm ms cinsinden response sürelerini al ve average hesapla
+#             RESPONSE_TIMES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep "ms |" | grep -o "[0-9]\+\.[0-9]\+ms" | sed 's/ms//g')
+#             if [ -n "$RESPONSE_TIMES" ]; then
+#                 TOTAL=0
+#                 COUNT=0
+#                 for t in $RESPONSE_TIMES; do
+#                     TOTAL=$(echo "$TOTAL + $t" | bc)
+#                     COUNT=$((COUNT + 1))
+#                 done
+#                 if [ "$COUNT" -gt 0 ]; then
+#                     AVG=$(echo "scale=2; $TOTAL / $COUNT" | bc)
+#                     echo "   📈 Average Response Time (ms): $AVG"
+#                 else
+#                     echo "   📈 Average Response Time (ms): N/A"
+#                 fi
+#             else
+#                 echo "   📈 Average Response Time (ms): N/A"
+#             fi
 
-            # Örnek response süreleri (ilk 10)
-            sudo journalctl -u backend-template-api --since today --no-pager | \
-            grep "ms |" | \
-            grep -o "[0-9]\+\.[0-9]\+ms" | \
-            head -10 | \
-            while read response_time; do
-                echo "   ⏰ Sample: $response_time"
-            done
+#             # Örnek response süreleri (ilk 10)
+#             sudo journalctl -u backend-template-api --since today --no-pager | \
+#             grep "ms |" | \
+#             grep -o "[0-9]\+\.[0-9]\+ms" | \
+#             head -10 | \
+#             while read response_time; do
+#                 echo "   ⏰ Sample: $response_time"
+#             done
 
-            echo ""
+#             echo ""
 
-            # 6. ERROR LOGS
-            echo "🚨 ERROR ANALYSIS"
-            echo "================="
+#             # 6. ERROR LOGS
+#             echo "🚨 ERROR ANALYSIS"
+#             echo "================="
 
-            # Gin errors
-            ERROR_COUNT=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -i "error" )
-            echo "❌ Total Errors: $ERROR_COUNT"
+#             # Gin errors
+#             ERROR_COUNT=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -i "error" )
+#             echo "❌ Total Errors: $ERROR_COUNT"
 
-            # Panic logs
-            PANIC_COUNT=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -i "panic" )
-            echo "💥 Panic Count: $PANIC_COUNT"
+#             # Panic logs
+#             PANIC_COUNT=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -i "panic" )
+#             echo "💥 Panic Count: $PANIC_COUNT"
 
-            if [ "$ERROR_COUNT" -gt 0 ]; then
-                echo ""
-                echo "🔍 RECENT ERRORS (Last 5):"
-                sudo journalctl -u backend-template-api --since today --no-pager | grep -i "error" | tail -5
-            fi
+#             if [ "$ERROR_COUNT" -gt 0 ]; then
+#                 echo ""
+#                 echo "🔍 RECENT ERRORS (Last 5):"
+#                 sudo journalctl -u backend-template-api --since today --no-pager | grep -i "error" | tail -5
+#             fi
 
-            echo ""
+#             echo ""
 
-            # 7. SISTEM DURUMU
-            echo "🖥️  SYSTEM STATUS"
-            echo "================="
+#             # 7. SISTEM DURUMU
+#             echo "🖥️  SYSTEM STATUS"
+#             echo "================="
 
-            # Service uptime
-            SERVICE_UPTIME=$(sudo systemctl show backend-template-api --property=ActiveEnterTimestamp | cut -d'=' -f2)
-            echo "🕐 Service Started: $SERVICE_UPTIME"
+#             # Service uptime
+#             SERVICE_UPTIME=$(sudo systemctl show backend-template-api --property=ActiveEnterTimestamp | cut -d'=' -f2)
+#             echo "🕐 Service Started: $SERVICE_UPTIME"
 
-            # Memory usage (düzeltildi)
-            MEMORY_INFO=$(free -h | grep '^Mem:')
-            MEMORY_USED=$(echo "$MEMORY_INFO" | awk '{print $3}')
-            MEMORY_TOTAL=$(echo "$MEMORY_INFO" | awk '{print $2}')
-            # Fix: Only calculate percent if both values are in the same unit (convert to MiB)
-            MEMORY_USED_MIB=$(free -m | awk '/^Mem:/ {print $3}')
-            MEMORY_TOTAL_MIB=$(free -m | awk '/^Mem:/ {print $2}')
-            if [ "$MEMORY_TOTAL_MIB" -gt 0 ] 2>/dev/null; then
-                MEMORY_PERCENT=$(awk "BEGIN {printf \"%.1f\", ($MEMORY_USED_MIB/$MEMORY_TOTAL_MIB)*100}")
-            else
-                MEMORY_PERCENT="N/A"
-            fi
-            echo "💾 Memory Usage: $MEMORY_USED/$MEMORY_TOTAL (${MEMORY_PERCENT}%)"
+#             # Memory usage (düzeltildi)
+#             MEMORY_INFO=$(free -h | grep '^Mem:')
+#             MEMORY_USED=$(echo "$MEMORY_INFO" | awk '{print $3}')
+#             MEMORY_TOTAL=$(echo "$MEMORY_INFO" | awk '{print $2}')
+#             # Fix: Only calculate percent if both values are in the same unit (convert to MiB)
+#             MEMORY_USED_MIB=$(free -m | awk '/^Mem:/ {print $3}')
+#             MEMORY_TOTAL_MIB=$(free -m | awk '/^Mem:/ {print $2}')
+#             if [ "$MEMORY_TOTAL_MIB" -gt 0 ] 2>/dev/null; then
+#                 MEMORY_PERCENT=$(awk "BEGIN {printf \"%.1f\", ($MEMORY_USED_MIB/$MEMORY_TOTAL_MIB)*100}")
+#             else
+#                 MEMORY_PERCENT="N/A"
+#             fi
+#             echo "💾 Memory Usage: $MEMORY_USED/$MEMORY_TOTAL (${MEMORY_PERCENT}%)"
 
-            # Disk usage
-            DISK_USAGE=$(df -h / | tail -1 | awk '{print $3"/"$2" ("$5")"}')
-            echo "💽 Disk Usage: $DISK_USAGE"
+#             # Disk usage
+#             DISK_USAGE=$(df -h / | tail -1 | awk '{print $3"/"$2" ("$5")"}')
+#             echo "💽 Disk Usage: $DISK_USAGE"
 
-            # CPU load
-            CPU_LOAD=$(uptime | awk -F'load average:' '{print $2}')
-            echo "⚡ CPU Load:$CPU_LOAD"
+#             # CPU load
+#             CPU_LOAD=$(uptime | awk -F'load average:' '{print $2}')
+#             echo "⚡ CPU Load:$CPU_LOAD"
 
-            echo ""
-            echo "📊 Report Generated Successfully!"
-            echo "========================================================"
+#             echo ""
+#             echo "📊 Report Generated Successfully!"
+#             echo "========================================================"
