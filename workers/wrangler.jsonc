@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "image-processing",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-07",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01,
+  },
+  "vars": {
+    "BACKEND_URL": "https://backend.hoi.com.tr",
+  },
+  "routes": [
+    {
+      "pattern": "cdn.hoi.com.tr",
+      "custom_domain": true,
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_ASSETS",
+      "bucket_name": "hoi-holding-r2-assets",
+    },
+  ],
+}
