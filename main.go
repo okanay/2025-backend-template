@@ -110,7 +110,7 @@ func main() {
 			protected.POST("/files/confirm-upload", fileHandler.ConfirmUpload)
 
 			// İçerik Yönetimi (GitHub)
-			content := protected.Group("/content")
+			content := protected.Group("/github")
 			{
 				content.GET("/categories", githubHandler.GetCategories)
 				content.GET("/:category", githubHandler.GetContent)

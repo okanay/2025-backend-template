@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"log"
 	"net/http"
 	"slices"
 
@@ -19,35 +20,32 @@ var PermissionMap = map[string]types.Permission{
 	"POST:/v1/files/confirm-upload": types.CanConfirmUpload,
 
 	// Github Content Routes
-	"GET:/v1/content/categories":             types.CanViewCategories,
-	"GET:/v1/content/:category":              types.CanGetContent,
-	"POST:/v1/content/:category/save":        types.CanSaveContent,
-	"GET:/v1/content/:category/draft-status": types.CanViewDraftStatus,
-	"POST:/v1/content/:category/publish":     types.CanPublishContent,
-	"DELETE:/v1/content/:category/restart":   types.CanRestartCategory,
+	"GET:/v1/github/categories":             types.CanViewGithubCategories,
+	"GET:/v1/github/:category":              types.CanGetGithubContent,
+	"POST:/v1/github/:category/save":        types.CanSaveGithubContent,
+	"GET:/v1/github/:category/draft-status": types.CanViewGithubDraftStatus,
+	"POST:/v1/github/:category/publish":     types.CanPublishGithubContent,
+	"DELETE:/v1/github/:category/restart":   types.CanRestartGithubCategory,
 }
 
 func PermissionMiddleware(cs cache.CacheService, ar *AuthRepository.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Admin rolündeki kullanıcılar her zaman tam yetkilidir, kontrol etmeye gerek yok.
+		// 1. Admin rolündeki kullanıcılar her zaman tam yetkilidir.
 		roleVal, _ := c.Get("user_role")
 		if role, ok := roleVal.(types.Role); ok && role == types.RoleAdmin {
 			c.Next()
 			return
 		}
 
-		// 2. Mevcut isteğin metodunu ve yolunu alıp bir anahtar oluştur.
+		// 2. Mevcut isteğin yoluna göre bir izin gerekip gerekmediğini kontrol et.
 		routeKey := c.Request.Method + ":" + c.FullPath()
-
-		// 3. Merkezi haritadan bu yol için bir izin gerekip gerekmediğini kontrol et.
 		requiredPermission, exists := PermissionMap[routeKey]
 		if !exists {
-			// Bu yol için özel bir izin tanımlanmamış, devam et.
-			c.Next()
+			c.Next() // Bu rota için bir izin tanımlanmamış, devam et.
 			return
 		}
 
-		// 4. Kullanıcı ID'sini AuthMiddleware'den al.
+		// 3. Kullanıcı kimliğini al.
 		userIDVal, _ := c.Get("user_id")
 		userID, ok := userIDVal.(uuid.UUID)
 		if !ok {
@@ -55,17 +53,34 @@ func PermissionMiddleware(cs cache.CacheService, ar *AuthRepository.Repository) 
 			return
 		}
 
-		// 5. Kullanıcının sahip olduğu tüm izinleri getir.
-		// TODO: Bu bölüm, performans için cache'den okunacak şekilde geliştirilmelidir.
-		userPermissions, _ := ar.SelectPermissionsByUserID(c.Request.Context(), userID)
+		// 4. Kullanıcının izinlerini, yeni cache yeteneğimizi kullanarak getir.
+		var userPermissions []types.Permission
 
-		// 6. Kullanıcının izinleri arasında gerekli izin var mı diye kontrol et.
-		hasPermission := slices.Contains(userPermissions, requiredPermission)
+		// Cache'de veri bulunamazsa çalıştırılacak olan veritabanı sorgusunu tanımla.
+		dbFallback := func() (any, error) {
+			return ar.SelectPermissionsByUserID(c.Request.Context(), userID)
+		}
 
-		// 7. Sonuç: İzin varsa devam et, yoksa engelle.
-		if hasPermission {
-			c.Next()
+		// "permissions" grubunda, bu kullanıcıya ait izinleri cache'den getirmeyi dene.
+		// Bulamazsan, dbFallback fonksiyonunu çalıştırıp sonucu cache'e yaz.
+		err := cs.GetOrSet(
+			cache.PermissionCacheGroup, // Merkezi bir yerden cache grup adı
+			userID.String(),            // Cache için benzersiz anahtar
+			&userPermissions,           // Sonucun yazılacağı hedef
+			dbFallback,                 // Cache'de yoksa çalışacak fonksiyon
+		)
+
+		if err != nil {
+			log.Printf("PERMISSION_CHECK_ERROR: UserID %s için izinler alınamadı: %v", userID, err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "permission_check_failed"})
+			return
+		}
+
+		// 5. Kullanıcının sahip olduğu izinler arasında gerekli olan var mı diye kontrol et.
+		if slices.Contains(userPermissions, requiredPermission) {
+			c.Next() // İzin var, devam et.
 		} else {
+			// İzin yok, engelle.
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"error":               "insufficient_permissions",
 				"message":             "Bu işlemi yapmak için yetkiniz bulunmamaktadır.",

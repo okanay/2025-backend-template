@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -16,14 +17,14 @@ import (
 
 // Cache grupları - gerektiğinde ekleyebilirsiniz
 const (
-	GroupJobs      = "jobs"
-	GroupContent   = "content"
-	GroupContact   = "contact"
-	GroupDocuments = "documents"
+	PermissionCacheGroup = "permissions"
 )
+
+type FallbackFunc func() (any, error)
 
 // CacheService, tüm cache implementasyonları için ortak arayüz
 type CacheService interface {
+	GetOrSet(group, identifier string, dest any, fallback FallbackFunc) error
 	TryCache(ctx *gin.Context, group, identifier string) bool
 	SaveCache(response any, group, identifier string) error
 	SaveCacheTTL(response any, group, identifier string, ttl time.Duration) error
@@ -91,6 +92,48 @@ func NewInMemoryCache(ttl time.Duration) *InMemoryCache {
 	// Periyodik temizleme başlat
 	go cache.startCleanupRoutine()
 	return cache
+}
+
+func (c *InMemoryCache) GetOrSet(group, identifier string, dest any, fallback FallbackFunc) error {
+	cacheKey := fmt.Sprintf("%s:%s", group, identifier)
+
+	// 1. Cache'den veriyi almayı dene.
+	cachedValue, found := c.get(cacheKey)
+	if found {
+		// 2. Cache'de bulundu. Veriyi hedefe (dest) Unmarshal etmeyi dene.
+		// Burada 'err' değişkenini if bloğunun dışında da kullanabilmek için önce tanımlıyoruz.
+		var unmarshalErr error
+		if unmarshalErr = json.Unmarshal(cachedValue, dest); unmarshalErr == nil {
+			// Başarıyla çözümlendi! İşlem tamam, fonksiyondan çık.
+			return nil
+		}
+
+		// Eğer buraya ulaştıysak, Unmarshal işlemi başarısız olmuştur.
+		// Veri bozuk kabul edilir, loglanır ve taze veri için fallback'e devam edilir.
+		log.Printf("CACHE_CORRUPT: Key %s. Re-fetching. Error on unmarshal: %v", cacheKey, unmarshalErr)
+	}
+
+	// 3. Cache'de yok ya da veri bozuk. Fallback fonksiyonunu çalıştırarak taze veriyi al.
+	fallbackData, err := fallback()
+	if err != nil {
+		return err // Veritabanı veya ana kaynaktan veri alınamadı.
+	}
+
+	// 4. Fallback'ten gelen taze veriyi JSON'a çevir.
+	bytes, err := json.Marshal(fallbackData)
+	if err != nil {
+		return fmt.Errorf("fallback data could not be marshalled to JSON: %w", err)
+	}
+
+	// 5. Bu taze veriyi (goroutine ile) arka planda cache'e kaydet.
+	go func() {
+		if saveErr := c.SaveCache(fallbackData, group, identifier); saveErr != nil {
+			log.Printf("CACHE_SAVE_ERROR: Key %s. Error: %v", cacheKey, saveErr)
+		}
+	}()
+
+	// 6. Son olarak, taze veriyi hedefe (dest) Unmarshal et.
+	return json.Unmarshal(bytes, dest)
 }
 
 // TryCache önbellekteki veriyi kontrol eder ve varsa yanıt olarak döndürür
@@ -240,6 +283,17 @@ func (c *InMemoryCache) cleanExpiredItems() {
 	}
 }
 
+func (c *InMemoryCache) get(key string) ([]byte, bool) {
+	c.mu.RLock()
+	item, exists := c.data[key]
+	c.mu.RUnlock()
+
+	if !exists || time.Since(item.cachedAt) > c.ttl {
+		return nil, false
+	}
+	return item.value, true
+}
+
 // ===== REDIS CACHE IMPLEMENTATION =====
 
 // RedisCache Redis tabanlı önbellekleme için yapı
@@ -262,6 +316,48 @@ func NewRedisCache(addr string, password string, db int, ttl time.Duration) *Red
 		ctx:        context.Background(),
 		defaultTTL: ttl,
 	}
+}
+
+func (c *RedisCache) GetOrSet(group, identifier string, dest any, fallback FallbackFunc) error {
+	cacheKey := fmt.Sprintf("%s:%s", group, identifier)
+
+	// 1. Cache'den veriyi almayı dene.
+	cachedValue, found := c.get(cacheKey)
+	if found {
+		// 2. Cache'de bulundu. Veriyi hedefe (dest) Unmarshal etmeyi dene.
+		// Burada 'err' değişkenini if bloğunun dışında da kullanabilmek için önce tanımlıyoruz.
+		var unmarshalErr error
+		if unmarshalErr = json.Unmarshal(cachedValue, dest); unmarshalErr == nil {
+			// Başarıyla çözümlendi! İşlem tamam, fonksiyondan çık.
+			return nil
+		}
+
+		// Eğer buraya ulaştıysak, Unmarshal işlemi başarısız olmuştur.
+		// Veri bozuk kabul edilir, loglanır ve taze veri için fallback'e devam edilir.
+		log.Printf("CACHE_CORRUPT: Key %s. Re-fetching. Error on unmarshal: %v", cacheKey, unmarshalErr)
+	}
+
+	// 3. Cache'de yok ya da veri bozuk. Fallback fonksiyonunu çalıştırarak taze veriyi al.
+	fallbackData, err := fallback()
+	if err != nil {
+		return err // Veritabanı veya ana kaynaktan veri alınamadı.
+	}
+
+	// 4. Fallback'ten gelen taze veriyi JSON'a çevir.
+	bytes, err := json.Marshal(fallbackData)
+	if err != nil {
+		return fmt.Errorf("fallback data could not be marshalled to JSON: %w", err)
+	}
+
+	// 5. Bu taze veriyi (goroutine ile) arka planda cache'e kaydet.
+	go func() {
+		if saveErr := c.SaveCache(fallbackData, group, identifier); saveErr != nil {
+			log.Printf("CACHE_SAVE_ERROR: Key %s. Error: %v", cacheKey, saveErr)
+		}
+	}()
+
+	// 6. Son olarak, taze veriyi hedefe (dest) Unmarshal et.
+	return json.Unmarshal(bytes, dest)
 }
 
 // TryCache önbellekteki veriyi kontrol eder ve varsa yanıt olarak döndürür
@@ -334,4 +430,12 @@ func (c *RedisCache) ClearAll() {
 // Stop Redis bağlantısını kapatır
 func (c *RedisCache) Stop() {
 	c.client.Close()
+}
+
+func (c *RedisCache) get(key string) ([]byte, bool) {
+	val, err := c.client.Get(c.ctx, key).Bytes()
+	if err != nil {
+		return nil, false
+	}
+	return val, true
 }

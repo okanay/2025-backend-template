@@ -10,21 +10,6 @@ import (
 type Permission string
 
 const (
-	// Post Permissions
-	CanCreatePost    Permission = "post:create"
-	CanEditOwnPost   Permission = "post:edit:own"
-	CanEditAnyPost   Permission = "post:edit:any"
-	CanDeleteOwnPost Permission = "post:delete:own"
-	CanDeleteAnyPost Permission = "post:delete:any"
-
-	// Auth Permissions
-	CanRegister            Permission = "auth:register"
-	CanLogin               Permission = "auth:login"
-	CanUseProvider         Permission = "auth:provider:use"
-	CanUseProviderCallback Permission = "auth:provider:callback"
-	CanViewProfile         Permission = "auth:view-profile"
-	CanLogout              Permission = "auth:logout"
-
 	// File Permissions
 	CanGetPresignedURL Permission = "file:presigned-url"
 	CanConfirmUpload   Permission = "file:confirm-upload"
@@ -32,12 +17,12 @@ const (
 	CanDeleteFile      Permission = "file:delete"
 
 	// Content (Github) Permissions
-	CanViewCategories  Permission = "content:view-categories"
-	CanGetContent      Permission = "content:get"
-	CanSaveContent     Permission = "content:save"
-	CanViewDraftStatus Permission = "content:view-draft-status"
-	CanPublishContent  Permission = "content:publish"
-	CanRestartCategory Permission = "content:restart-category"
+	CanViewGithubCategories  Permission = "github:view-categories"
+	CanGetGithubContent      Permission = "github:get"
+	CanSaveGithubContent     Permission = "github:save"
+	CanViewGithubDraftStatus Permission = "github:view-draft-status"
+	CanPublishGithubContent  Permission = "github:publish"
+	CanRestartGithubCategory Permission = "github:restart-category"
 )
 
 // --- Veritabanı Modelleri ---
