@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// CompleteUploadSignature bir yükleme imzasını tamamlandı olarak işaretler ve resim ile ilişkilendirir
-func (r *Repository) CompleteUploadSignature(ctx context.Context, signatureID uuid.UUID) error {
+// MarkUploadAsCompleted bir yükleme imzasını tamamlandı olarak işaretler ve resim ile ilişkilendirir
+func (r *Repository) MarkUploadAsCompleted(ctx context.Context, signatureID uuid.UUID) error {
 	query := `
 		UPDATE files_signatures
 		SET completed = true

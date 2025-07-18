@@ -40,7 +40,7 @@ func (h *Handler) ConfirmUpload(c *gin.Context) {
 		return
 	}
 
-	signature, err := h.FileRepository.GetSignatureByID(c.Request.Context(), signatureID)
+	signature, err := h.FileRepository.GetUploadSignatureByID(c.Request.Context(), signatureID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -75,7 +75,7 @@ func (h *Handler) ConfirmUpload(c *gin.Context) {
 		SizeInBytes:  input.SizeInBytes,
 	}
 
-	fileID, err := h.FileRepository.SaveFile(c.Request.Context(), fileInput)
+	fileID, err := h.FileRepository.CreateFileRecord(c.Request.Context(), fileInput)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -86,7 +86,7 @@ func (h *Handler) ConfirmUpload(c *gin.Context) {
 	}
 
 	// İmza kaydını tamamlandı olarak işaretle
-	err = h.FileRepository.CompleteUploadSignature(c.Request.Context(), signatureID)
+	err = h.FileRepository.MarkUploadAsCompleted(c.Request.Context(), signatureID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,

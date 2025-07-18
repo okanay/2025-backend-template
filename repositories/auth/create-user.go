@@ -11,48 +11,55 @@ import (
 // CreateUser, şifre ile yeni bir kullanıcı oluşturur.
 // Hem 'users' hem de 'user_details' tablolarına kayıt atar.
 func (r *Repository) CreateUser(ctx context.Context, data types.UserCreateRequest) (*types.User, error) {
-	// Şifreyi güvenli bir şekilde hash'le.
+	// Kullanıcı tarafından sağlanan şifreyi güvenli bir şekilde hash'le.
 	hashedPassword, err := utils.EncryptPassword(data.Password)
 	if err != nil {
 		return nil, err
 	}
 
-	// Tüm işlemleri tek bir "atomik" paket olarak sarmak için transaction başlat.
+	// Tüm işlemleri bir bütün olarak ele almak için bir transaction başlat.
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback() // Hata olursa her şeyi geri al.
+	defer tx.Rollback() // Transaction sırasında bir hata oluşursa, yapılan tüm değişiklikleri geri al.
 
-	// 1. Yeni kullanıcıyı 'users' tablosuna ekle ve yeni ID'sini al.
-	var userID uuid.UUID
+	// Yeni kullanıcı için benzersiz bir UUID oluştur.
+	userID, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. Yeni kullanıcıyı 'users' tablosuna ekle.
 	userQuery := `
-        INSERT INTO users (email, auth_provider, hashed_password, role, status)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-    `
-	err = tx.QueryRowContext(ctx, userQuery,
+				INSERT INTO users (id, email, auth_provider, hashed_password, role, status)
+				VALUES ($1, $2, $3, $4, $5, $6)
+	`
+	_, err = tx.ExecContext(ctx, userQuery,
+		userID,
 		data.Email,
 		types.ProviderCredentials,
 		hashedPassword,
 		types.RoleUser,
 		types.UserStatusActive,
-	).Scan(&userID)
+	)
+
+	// Eğer e-posta zaten mevcutsa, bu noktada bir veritabanı hatası döner.
 	if err != nil {
-		return nil, err // E-posta zaten varsa, veritabanı hatası burada yakalanır.
+		return nil, err
 	}
 
-	// 2. Yeni kullanıcıya ait boş bir 'user_details' kaydı oluştur.
+	// 2. Yeni kullanıcıya ait bir 'user_details' kaydı oluştur.
 	detailsQuery := "INSERT INTO user_details (user_id) VALUES ($1)"
 	if _, err := tx.ExecContext(ctx, detailsQuery, userID); err != nil {
 		return nil, err
 	}
 
-	// 3. Her şey başarılıysa, transaction'ı onayla.
+	// 3. Tüm işlemler başarılı bir şekilde tamamlandıysa, transaction'ı onayla.
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// 4. Oluşturulan kullanıcının tam halini veritabanından çek ve döndür.
+	// 4. Oluşturulan kullanıcıyı veritabanından çek ve döndür.
 	return r.SelectByID(ctx, userID)
 }

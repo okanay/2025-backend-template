@@ -1,6 +1,6 @@
 -- DOSYA TABLOLARI (Tüm dosyalar için genel tablo)
 CREATE TABLE IF NOT EXISTS files (
-    id UUID DEFAULT uuid_generate_v4 () PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     url TEXT NOT NULL, -- Erişim URL'i
     file_type TEXT NOT NULL, -- Dosya MIME tipi
     filename TEXT NOT NULL, -- Orijinal dosya adı
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS files (
 
 -- TEK UPLOAD SIGNATURES TABLOSU (Tüm dosya yüklemeleri için)
 CREATE TABLE IF NOT EXISTS files_signatures (
-    id UUID DEFAULT uuid_generate_v4 () PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     presigned_url TEXT NOT NULL, -- Yükleme için ön-imzalı URL
     upload_url TEXT NOT NULL, -- Dosyanın erişileceği URL
     filename TEXT NOT NULL, -- Dosya adı

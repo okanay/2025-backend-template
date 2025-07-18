@@ -8,7 +8,7 @@ import (
 	"github.com/okanay/backend-template/types"
 )
 
-func (r *Repository) GetSignatureByID(ctx context.Context, signatureID uuid.UUID) (*types.UploadSignature, error) {
+func (r *Repository) GetUploadSignatureByID(ctx context.Context, signatureID uuid.UUID) (*types.UploadSignature, error) {
 	query := `
 		SELECT id, presigned_url, upload_url, filename, file_type, file_category, expires_at, completed, created_at
 		FROM files_signatures

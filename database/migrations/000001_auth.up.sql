@@ -1,5 +1,5 @@
 -- EXTENSIONS
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- HELPER ENUM TYPES
 CREATE TYPE user_status AS ENUM ('Active', 'Suspended', 'Deleted');
@@ -8,7 +8,7 @@ CREATE TYPE auth_provider AS ENUM ('credentials', 'google', 'facebook', 'twitter
 
 -- USER TABLE: Kimlik ve rolü tutar.
 CREATE TABLE IF NOT EXISTS users (
-    id UUID DEFAULT uuid_generate_v4 () PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     auth_provider auth_provider DEFAULT 'credentials' NOT NULL,
     hashed_password TEXT,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS user_permissions (
 
 -- REFRESH TOKEN TABLE: Güvenli oturum yönetimini sağlar.
 CREATE TABLE IF NOT EXISTS refresh_tokens (
-    id UUID DEFAULT uuid_generate_v4 () PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     user_id UUID NOT NULL,
     user_email TEXT,
     token TEXT UNIQUE NOT NULL,
