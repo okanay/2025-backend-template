@@ -1,6 +1,7 @@
 package GothService
 
 import (
+	"github.com/davecgh/go-spew/spew"
 	"github.com/markbates/goth"
 	"github.com/okanay/backend-template/types"
 )
@@ -15,7 +16,8 @@ func NewService() *Service {
 }
 
 func (s *Service) HandleProviderCallback(gothUser goth.User) *types.ProviderUserData {
-	// Goth'un standart 'goth.User' objesini bizim kendi standart 'ProviderUserData' objemize çevir.
+	spew.Dump(gothUser)
+
 	return &types.ProviderUserData{
 		Provider:    types.AuthProvider(gothUser.Provider),
 		ProviderID:  gothUser.UserID,

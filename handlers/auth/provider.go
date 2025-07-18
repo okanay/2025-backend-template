@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/okanay/backend-template/configs"
 	"github.com/okanay/backend-template/types"
@@ -26,21 +27,10 @@ func (h *Handler) ProviderHandler(c *gin.Context) {
 		return
 	}
 
-	// Desteklenen provider'ları kontrol et
-	supportedProviders := map[string]bool{
-		"google":    true,
-		"facebook":  false,
-		"twitter":   false,
-		"apple":     false,
-		"microsoft": false,
-	}
-
-	if !supportedProviders[provider] {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "unsupported_provider",
-			"message": "Desteklenmeyen sağlayıcı: " + provider,
-		})
+	providerName := c.Param("provider")
+	_, err := goth.GetProvider(providerName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_provider"})
 		return
 	}
 

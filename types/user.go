@@ -26,8 +26,8 @@ const (
 type AuthProvider string
 
 const (
-	ProviderCredentials AuthProvider = "Credentials"
-	ProviderGoogle      AuthProvider = "Google"
+	ProviderCredentials AuthProvider = "credentials"
+	ProviderGoogle      AuthProvider = "google"
 )
 
 // --- Veritabanı Modelleri ---

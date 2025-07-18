@@ -76,22 +76,9 @@ func (h *Handler) Register(c *gin.Context) {
 	// 4. Cookie'leri ayarla
 	utils.SetAuthCookies(c, accessToken, refreshToken)
 
-	// 5. Kullanıcı bilgilerini yanıt olarak döndür
-	userView := types.UserView{
-		ID:            user.ID,
-		Role:          user.Role,
-		Email:         user.Email,
-		EmailVerified: user.EmailVerified,
-	}
-
-	response := types.LoginResponse{
-		User:        userView,
-		Permissions: []types.Permission{}, // Boş izin listesi
-	}
-
+	// 5. Cookie Ayarlandi Frontned - Get-Me Call Et.
 	c.JSON(http.StatusCreated, gin.H{
 		"success": true,
 		"message": "Kayıt başarılı",
-		"data":    response,
 	})
 }

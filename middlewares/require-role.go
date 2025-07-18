@@ -2,7 +2,6 @@
 package middlewares
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,25 +11,18 @@ import (
 // RequireRole belirli bir role sahip olmayı gerektiren middleware
 func RequireRole(requiredRole types.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Context'ten role bilgisini al (AuthMiddleware tarafından set edilmiş olmalı)
-		role, exists := c.Get("role")
-		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"success": false,
-				"error":   "unauthorized",
-				"message": "Yetkilendirme bilgisi bulunamadı",
-			})
-			c.Abort()
+		roleVal, _ := c.Get("user_role") // AuthMiddleware'den gelir
+		userRole, _ := roleVal.(types.Role)
+
+		// Admin her zaman yetkilidir.
+		if userRole == types.RoleAdmin {
+			c.Next()
 			return
 		}
 
-		fmt.Println("Role:", role)
-		if role != requiredRole || role != types.RoleAdmin {
-			c.JSON(http.StatusForbidden, gin.H{
-				"success": false,
-				"error":   "forbidden",
-				"message": "Bu işlem için yetkiniz yok",
-			})
+		// Gerekli role sahip değilse engelle.
+		if userRole != requiredRole {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			c.Abort()
 			return
 		}

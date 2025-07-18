@@ -1,8 +1,8 @@
 package UserHandler
 
 import (
+	UserRepository "github.com/okanay/backend-template/repositories/auth"
 	TokenRepository "github.com/okanay/backend-template/repositories/token"
-	UserRepository "github.com/okanay/backend-template/repositories/user"
 	GothService "github.com/okanay/backend-template/services/goth"
 )
 

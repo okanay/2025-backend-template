@@ -11,16 +11,16 @@ import (
 
 	c "github.com/okanay/backend-template/configs"
 	db "github.com/okanay/backend-template/database"
+	uh "github.com/okanay/backend-template/handlers/auth"
 	fh "github.com/okanay/backend-template/handlers/file"
 	gfm "github.com/okanay/backend-template/handlers/github-file-manager"
 	mh "github.com/okanay/backend-template/handlers/globals"
-	uh "github.com/okanay/backend-template/handlers/user"
 
 	"github.com/okanay/backend-template/middlewares"
 	mw "github.com/okanay/backend-template/middlewares"
+	ur "github.com/okanay/backend-template/repositories/auth"
 	fr "github.com/okanay/backend-template/repositories/file"
 	tr "github.com/okanay/backend-template/repositories/token"
-	ur "github.com/okanay/backend-template/repositories/user"
 	gr "github.com/okanay/backend-template/services/github"
 	GothService "github.com/okanay/backend-template/services/goth"
 	r2r "github.com/okanay/backend-template/services/r2"

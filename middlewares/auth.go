@@ -11,8 +11,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/okanay/backend-template/configs"
+	userRepo "github.com/okanay/backend-template/repositories/auth"
 	tokenRepo "github.com/okanay/backend-template/repositories/token"
-	userRepo "github.com/okanay/backend-template/repositories/user"
 	"github.com/okanay/backend-template/types"
 	"github.com/okanay/backend-template/utils"
 )

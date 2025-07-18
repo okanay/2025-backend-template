@@ -121,23 +121,9 @@ func (h *Handler) Login(c *gin.Context) {
 	// 7. Cookie'leri ayarla
 	utils.SetAuthCookies(c, accessToken, refreshToken)
 
-	// 8. Kullanıcı bilgilerini yanıt olarak döndür
-	userView := types.UserView{
-		ID:            user.ID,
-		Role:          user.Role,
-		Email:         user.Email,
-		EmailVerified: user.EmailVerified,
-	}
-
-	// TODO: Kullanıcı izinlerini de ekleyebilirsiniz
-	response := types.LoginResponse{
-		User:        userView,
-		Permissions: []types.Permission{}, // Boş izin listesi
-	}
-
+	// 8. Cookie Ayarlandi Frontned - Get-Me Call Et.
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Giriş başarılı",
-		"data":    response,
 	})
 }
