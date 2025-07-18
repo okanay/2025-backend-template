@@ -70,6 +70,7 @@ type UserView struct {
 }
 
 type ProviderUserData struct {
+	RawData     map[string]interface{}
 	Provider    AuthProvider
 	ProviderID  string
 	Email       string

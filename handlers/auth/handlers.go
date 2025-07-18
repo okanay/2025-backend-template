@@ -1,4 +1,4 @@
-package UserHandler
+package AuthHandler
 
 import (
 	UserRepository "github.com/okanay/backend-template/repositories/auth"

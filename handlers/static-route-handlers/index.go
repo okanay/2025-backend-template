@@ -1,4 +1,4 @@
-package handlers
+package StaticRoutesHandler
 
 import (
 	"github.com/gin-gonic/gin"

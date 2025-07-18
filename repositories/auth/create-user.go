@@ -1,4 +1,4 @@
-package UserRepository
+package AuthRepository
 
 import (
 	"context"
@@ -50,8 +50,12 @@ func (r *Repository) CreateUser(ctx context.Context, data types.UserCreateReques
 	}
 
 	// 2. Yeni kullanıcıya ait bir 'user_details' kaydı oluştur.
-	detailsQuery := "INSERT INTO user_details (user_id) VALUES ($1)"
-	if _, err := tx.ExecContext(ctx, detailsQuery, userID); err != nil {
+	detailsID, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+	detailsQuery := "INSERT INTO user_details (id, user_id) VALUES ($1, $2)"
+	if _, err := tx.ExecContext(ctx, detailsQuery, detailsID, userID); err != nil {
 		return nil, err
 	}
 

@@ -1,4 +1,4 @@
-package UserRepository
+package AuthRepository
 
 import (
 	"context"
@@ -163,12 +163,20 @@ func (r *Repository) createUserTx(ctx context.Context, tx *sql.Tx, user *types.U
 // createUserDetailsTx, transaction içinde 'user_details' tablosuna yeni bir kayıt ekler.
 // Yeni ID'nin bu fonksiyona parametre olarak geçilmesi gerekir.
 func (r *Repository) createUserDetailsTx(ctx context.Context, tx *sql.Tx, userID uuid.UUID, data *types.ProviderUserData) error {
-	// Yeni bir `user_details` kaydı oluştururken, backend'de oluşturulan `userID` kullanılır.
+	// 1. user_details kaydı için YENİ ve AYRI bir UUID oluştur.
+	newDetailsID, err := uuid.NewV7()
+	if err != nil {
+		return err
+	}
+
+	// 2. Sorguya 'id' kolonunu ve oluşturulan yeni UUID'yi ekle.
 	query := `
-        INSERT INTO user_details (user_id, provider_id, display_name, first_name, last_name, avatar_url)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO user_details (id, user_id, provider_id, display_name, first_name, last_name, avatar_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
-	_, err := tx.ExecContext(ctx, query, userID, data.ProviderID, data.DisplayName, data.FirstName, data.LastName, data.AvatarURL)
+
+	// 3. Sorguyu yeni ID ile birlikte çalıştır.
+	_, err = tx.ExecContext(ctx, query, newDetailsID, userID, data.ProviderID, data.DisplayName, data.FirstName, data.LastName, data.AvatarURL)
 	return err
 }
 

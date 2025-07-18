@@ -1,4 +1,4 @@
-package UserRepository
+package AuthRepository
 
 import (
 	"database/sql"

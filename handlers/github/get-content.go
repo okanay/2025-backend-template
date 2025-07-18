@@ -1,4 +1,4 @@
-package GithubFileManager
+package GithubHandler
 
 import (
 	"net/http"

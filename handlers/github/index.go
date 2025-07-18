@@ -1,4 +1,4 @@
-package GithubFileManager
+package GithubHandler
 
 import (
 	GithubRepository "github.com/okanay/backend-template/services/github"

@@ -9,182 +9,153 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	c "github.com/okanay/backend-template/configs"
+	"github.com/okanay/backend-template/configs"
 	db "github.com/okanay/backend-template/database"
-	uh "github.com/okanay/backend-template/handlers/auth"
-	fh "github.com/okanay/backend-template/handlers/file"
-	gfm "github.com/okanay/backend-template/handlers/github-file-manager"
-	mh "github.com/okanay/backend-template/handlers/globals"
+	AuthHandler "github.com/okanay/backend-template/handlers/auth"
+	FileHandler "github.com/okanay/backend-template/handlers/file"
+	GithubHandler "github.com/okanay/backend-template/handlers/github"
+	StaticRoutesHandler "github.com/okanay/backend-template/handlers/static-route-handlers"
+	AuthRepository "github.com/okanay/backend-template/repositories/auth"
+	FileRepository "github.com/okanay/backend-template/repositories/file"
+	TokenRepository "github.com/okanay/backend-template/repositories/token"
 
 	"github.com/okanay/backend-template/middlewares"
-	mw "github.com/okanay/backend-template/middlewares"
-	ur "github.com/okanay/backend-template/repositories/auth"
-	fr "github.com/okanay/backend-template/repositories/file"
-	tr "github.com/okanay/backend-template/repositories/token"
-	gr "github.com/okanay/backend-template/services/github"
-	GothService "github.com/okanay/backend-template/services/goth"
-	r2r "github.com/okanay/backend-template/services/r2"
 
 	"github.com/okanay/backend-template/services/cache"
+	GithubService "github.com/okanay/backend-template/services/github"
+	GothService "github.com/okanay/backend-template/services/goth"
+	R2Service "github.com/okanay/backend-template/services/r2"
 )
 
 func main() {
-	// 1. Çevresel Değişkenleri Yükle
+	// 1. Uygulama Yapılandırmasını Yükle
+	loadConfig()
+
+	// 2. Veritabanı Bağlantısını Kur
+	db := setupDatabase()
+	defer db.Close()
+
+	// 3. Gin Router'ını Başlat
+	router := setupRouter()
+
+	// Repositories (Veritabanı Erişim Katmanı)
+	userRepo := AuthRepository.NewRepository(db)
+	tokenRepo := TokenRepository.NewRepository(db)
+	fileRepo := FileRepository.NewRepository(db)
+
+	// Services Initialization
+	GothService.SetupGothProviders()
+	cacheService := cache.NewCacheService(1 * time.Hour)
+
+	// Services (İş Mantığı Katmanı)
+	gothService := GothService.NewService()
+	githubService := GithubService.NewService(
+		os.Getenv("GITHUB_OWNER"),
+		os.Getenv("GITHUB_REPOSITORY_NAME"),
+		os.Getenv("GITHUB_TOKEN"),
+	)
+	r2Service := R2Service.NewService(
+		os.Getenv("R2_ACCOUNT_ID"),
+		os.Getenv("R2_ACCESS_KEY_ID"),
+		os.Getenv("R2_ACCESS_KEY_SECRET"),
+		os.Getenv("R2_BUCKET_NAME"),
+		os.Getenv("R2_FOLDER_NAME"),
+		os.Getenv("R2_PUBLIC_URL_BASE"),
+		os.Getenv("R2_ENDPOINT"),
+	)
+
+	// Handlers (İstekleri İşleyen Katman)
+	staticHandler := StaticRoutesHandler.NewHandler()
+	authHandler := AuthHandler.NewHandler(gothService, userRepo, tokenRepo)
+	fileHandler := FileHandler.NewHandler(fileRepo, r2Service)
+	githubHandler := GithubHandler.NewHandler(githubService)
+
+	// --- ROTALAR ---
+
+	// Global ve 404 Rotaları
+	router.GET("/", staticHandler.Index)
+	router.GET("/ip-test", staticHandler.IPTestEndpoint)
+	router.NoRoute(staticHandler.NotFound)
+
+	// API Versiyonlama Grubu (v1)
+	v1 := router.Group("/v1")
+	{
+		// --- Public Rotalar (Kimlik Doğrulama GEREKTİRMEYEN) ---
+		public := v1.Group("/")
+		public.Use(middlewares.RateLimiterMiddleware(400, time.Minute))
+		{
+			// Kullanıcı Kimlik Doğrulama
+			public.POST("/auth/register", authHandler.Register)
+			public.POST("/auth/login", authHandler.Login)
+
+			// Sosyal Medya (OAuth)
+			public.GET("/auth/provider/:provider", authHandler.ProviderHandler)
+			public.GET("/auth/provider/:provider/callback", authHandler.CallbackHandler)
+		}
+
+		// --- Protected Rotalar (Kimlik Doğrulama GEREKTİREN) ---
+		protected := v1.Group("/")
+		protected.Use(middlewares.RateLimiterMiddleware(1000, time.Minute))
+		protected.Use(middlewares.AuthMiddleware(userRepo, tokenRepo))
+		protected.Use(middlewares.PermissionMiddleware(cacheService, userRepo))
+		{
+			// Oturum ve Kullanıcı
+			protected.GET("/auth/me", authHandler.GetMe)
+			protected.POST("/auth/logout", authHandler.Logout)
+
+			// Dosya Yönetimi
+			protected.GET("/files", fileHandler.GetFilesByCategory)
+			protected.DELETE("/files/:id", fileHandler.DeleteFile)
+			protected.POST("/files/presigned-url", fileHandler.CreatePresignedURL)
+			protected.POST("/files/confirm-upload", fileHandler.ConfirmUpload)
+
+			// İçerik Yönetimi (GitHub)
+			content := protected.Group("/content")
+			{
+				content.GET("/categories", githubHandler.GetCategories)
+				content.GET("/:category", githubHandler.GetContent)
+				content.POST("/:category/save", githubHandler.SaveContent)
+				content.GET("/:category/draft-status", githubHandler.GetDraftStatus)
+				content.POST("/:category/publish", githubHandler.PublishCategory)
+				content.DELETE("/:category/restart", githubHandler.RestartCategory)
+			}
+		}
+	}
+
+	startServer(router)
+}
+
+// loadConfig, .env dosyasını yükler.
+func loadConfig() {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Println("[ENV]: .env file could not be loaded, environment variables will be used")
 	} else {
 		log.Println("[ENV]: .env file loaded successfully.")
 	}
+}
 
-	// 2. Veritabanı Bağlantısı Kur
-	sqlDB, err := db.Init(os.Getenv("DATABASE_URL"))
+// setupDatabase, veritabanı bağlantısını kurar ve ayarlar.
+func setupDatabase() *sql.DB {
+	db, err := db.Init(os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("[DATABASE]: Error connecting to the database: %v", err)
-	} else {
-		log.Println("[DATABASE]: Database connection established successfully")
-		defer sqlDB.Close()
 	}
+	log.Println("[DATABASE]: Database connection established successfully")
 
-	sqlDB.SetMaxOpenConns(25)
-	sqlDB.SetMaxIdleConns(25)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	return db
+}
 
-	// 3. Servisleri ve Handler'ları Başlat
-	repos := initRepositories(sqlDB)
-	services := initServices()
-	handlers := initHandlers(repos, services)
-
-	// 4. Router ve Middleware Yapılandırması
+// setupRouter, Gin router'ını oluşturur ve global middleware'leri ekler.
+func setupRouter() *gin.Engine {
 	router := gin.Default()
-	// configs.SetupTrustedProxies(router)
-	router.Use(c.CorsConfig())
-	router.Use(c.SecureConfig)
-	router.MaxMultipartMemory = 10 << 20
-
-	// 4.0 Global Middlewares
+	router.Use(configs.CorsConfig())
+	router.Use(configs.SecureConfig)
 	router.Use(middlewares.TimeoutMiddleware())
-
-	// 4.1 Turnstile Middleware
-	turnstileMiddleware := middlewares.NewTurnstileMiddleware()
-	defer turnstileMiddleware.Close()
-
-	// 4.2 Route Grupları
-	publicAPI := router.Group("/public")
-	publicFileAPI := router.Group("/public/files")
-	internalAPI := router.Group("/internal")
-	authAPI := router.Group("/auth")
-
-	// 4.3 Grup Bazlı Middleware'ler
-	publicAPI.Use(mw.RateLimiterMiddleware(400, time.Minute))
-	internalAPI.Use(mw.RateLimiterMiddleware(1000, time.Minute))
-
-	authAPI.Use(mw.RateLimiterMiddleware(1000, time.Minute))
-	authAPI.Use(mw.AuthMiddleware(repos.User, repos.Token))
-
-	publicFileAPI.Use(mw.RateLimiterMiddleware(10, 120*time.Minute))
-
-	// 4.4 Ana ve NotFound Route
-	router.GET("/", handlers.Main.Index)
-	router.NoRoute(handlers.Main.NotFound)
-
-	// 4.5 Route Organizasyonu
-
-	// --- PUBLIC AUTH ---
-	publicAPI.POST("/login", handlers.User.Login)
-	publicAPI.POST("/register", handlers.User.Register)
-	publicAPI.GET("/test-ip-address", handlers.Main.IPTestEndpoint)
-
-	// --- OAUTH PROVIDER AUTH ---
-	// Gothic middleware'i ekleyebilirsiniz (isteğe bağlı)
-	oauthAPI := publicAPI.Group("/auth")
-	// oauthAPI.Use(middlewares.GothicMiddleware()) // İsteğe bağlı
-	oauthAPI.GET("/:provider", handlers.User.ProviderHandler)          // Provider'a yönlendirme
-	oauthAPI.GET("/:provider/callback", handlers.User.CallbackHandler) // Provider callback
-
-	// --- PUBLIC FILES ---
-	publicFileAPI.Use(turnstileMiddleware.Middleware())
-	publicFileAPI.POST("/presigned-url", handlers.File.CreatePresignedURL)
-	publicFileAPI.POST("/confirm-upload", handlers.File.ConfirmUpload)
-
-	// --- AUTH USER ---
-	authAPI.GET("/logout", handlers.User.Logout)
-	authAPI.GET("/get-me", handlers.User.GetMe)
-
-	// --- AUTH FILES ---
-	authAPI.GET("/files/category", handlers.File.GetFilesByCategory)
-	authAPI.POST("/files/presigned-url", handlers.File.CreatePresignedURL)
-	authAPI.POST("/files/confirm-upload", handlers.File.ConfirmUpload)
-	authAPI.DELETE("/files/:id", handlers.File.DeleteFile)
-
-	// --- AUTH DOCUMENTS ---
-	authAPI.GET("/content/categories", handlers.GithubFileManager.GetCategories)
-	authAPI.GET("/content/:category", handlers.GithubFileManager.GetContent)
-	authAPI.POST("/content/:category/save", handlers.GithubFileManager.SaveContent)
-	authAPI.GET("/content/:category/draft-status", handlers.GithubFileManager.GetDraftStatus)
-	authAPI.POST("/content/:category/publish", handlers.GithubFileManager.PublishCategory)
-	authAPI.DELETE("/content/:category/restart", handlers.GithubFileManager.RestartCategory)
-
-	// 5. Sunucuyu Başlat
-	startServer(router)
-}
-
-type Repositories struct {
-	User  *ur.Repository
-	Token *tr.Repository
-	File  *fr.Repository
-}
-
-type Services struct {
-	Goth   *GothService.Service
-	Cache  cache.CacheService
-	R2     *r2r.Service
-	Github *gr.Service
-}
-
-type Handlers struct {
-	Main              *mh.Handler
-	User              *uh.Handler
-	File              *fh.Handler
-	GithubFileManager *gfm.Handler
-}
-
-// Repository'lerin başlatılması
-func initRepositories(sqlDB *sql.DB) Repositories {
-	return Repositories{
-		User:  ur.NewRepository(sqlDB),
-		Token: tr.NewRepository(sqlDB),
-		File:  fr.NewRepository(sqlDB),
-	}
-}
-
-// initServices fonksiyonunu da güncelle
-func initServices() Services {
-	GothService.SetupGothProviders()
-
-	return Services{
-		Goth:   GothService.NewService(),
-		Cache:  cache.NewCacheService(1 * time.Hour),
-		Github: gr.NewService(os.Getenv("GITHUB_OWNER"), os.Getenv("GITHUB_REPOSITORY_NAME"), os.Getenv("GITHUB_TOKEN")),
-		R2: r2r.NewService(
-			os.Getenv("R2_ACCOUNT_ID"),
-			os.Getenv("R2_ACCESS_KEY_ID"),
-			os.Getenv("R2_ACCESS_KEY_SECRET"),
-			os.Getenv("R2_BUCKET_NAME"),
-			os.Getenv("R2_FOLDER_NAME"),
-			os.Getenv("R2_PUBLIC_URL_BASE"),
-			os.Getenv("R2_ENDPOINT"),
-		),
-	}
-}
-
-// Handler'ların başlatılması
-func initHandlers(repos Repositories, services Services) Handlers {
-	return Handlers{
-		Main:              mh.NewHandler(),
-		User:              uh.NewHandler(services.Goth, repos.User, repos.Token),
-		File:              fh.NewHandler(repos.File, services.R2),
-		GithubFileManager: gfm.NewHandler(services.Github),
-	}
+	router.MaxMultipartMemory = 10 << 20
+	return router
 }
 
 // Sunucuyu başlatır

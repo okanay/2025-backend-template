@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- USER DETAILS TABLE: Opsiyonel profil verilerini barındırır.
 CREATE TABLE IF NOT EXISTS user_details (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID UNIQUE NOT NULL,
+    id TEXT PRIMARY KEY,
+    user_id TEXT UNIQUE NOT NULL,
     provider_id TEXT,
     display_name TEXT,
     first_name TEXT,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS user_details (
 
 -- PERMISSIONS TABLE: Sistemdeki tüm potansiyel izinlerin sözlüğü. Yeni yetkiler migration ile buraya eklenir.
 CREATE TABLE IF NOT EXISTS permissions (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     name TEXT UNIQUE NOT NULL, -- Örn: "post:delete:any"
     description TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS permissions (
 
 -- USER_PERMISSIONS TABLE: Hangi kullanıcının hangi izne sahip olduğunu bağlayan dinamik tablo.
 CREATE TABLE IF NOT EXISTS user_permissions (
-    user_id UUID NOT NULL,
-    permission_id UUID NOT NULL,
+    user_id TEXT NOT NULL,
+    permission_id TEXT NOT NULL,
     PRIMARY KEY (user_id, permission_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS user_permissions (
 -- REFRESH TOKEN TABLE: Güvenli oturum yönetimini sağlar.
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id TEXT PRIMARY KEY,
-    user_id UUID NOT NULL,
+    user_id TEXT NOT NULL,
     user_email TEXT,
     token TEXT UNIQUE NOT NULL,
     ip_address TEXT,

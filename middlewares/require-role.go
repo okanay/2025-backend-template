@@ -11,7 +11,7 @@ import (
 // RequireRole belirli bir role sahip olmayı gerektiren middleware
 func RequireRole(requiredRole types.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		roleVal, _ := c.Get("user_role") // AuthMiddleware'den gelir
+		roleVal, _ := c.Get("user_role")
 		userRole, _ := roleVal.(types.Role)
 
 		// Admin her zaman yetkilidir.

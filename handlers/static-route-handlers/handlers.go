@@ -1,4 +1,4 @@
-package handlers
+package StaticRoutesHandler
 
 type Handler struct {
 }
