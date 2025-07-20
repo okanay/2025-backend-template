@@ -2,6 +2,7 @@ package AuthHandler
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -161,7 +162,7 @@ func (h *Handler) CallbackHandler(c *gin.Context) {
 	// Frontend'e redirect et (veya JSON response dön)
 	frontendURL := "http://localhost:3000" // Development
 	if gin.Mode() == gin.ReleaseMode {
-		frontendURL = "https://yourdomain.com" // Production
+		frontendURL = os.Getenv("FRONTEND_URL")
 	}
 
 	// Başarılı giriş sonrası frontend'e yönlendir
