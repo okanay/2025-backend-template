@@ -13,15 +13,10 @@ func (h *Handler) IPTestEndpoint(c *gin.Context) {
 
 	// Tüm header bilgilerini topla
 	headers := map[string]string{
-		"CF-Connecting-IP":   c.Request.Header.Get("CF-Connecting-IP"),
-		"CF-IPCountry":       c.Request.Header.Get("CF-IPCountry"),
-		"CF-Ray":             c.Request.Header.Get("CF-Ray"),
-		"X-Forwarded-For":    c.Request.Header.Get("X-Forwarded-For"),
-		"X-Forwarded-For-IP": c.Request.Header.Get("X-Forwarded-For-IP"),
-		"Proxy-Headers":      c.Request.Header.Get("Proxy-Headers"),
-		"Client-Headers":     c.Request.Header.Get("Client-Headers"),
-		"X-Real-IP":          c.Request.Header.Get("X-Real-IP"),
-		"True-Client-IP":     c.Request.Header.Get("True-Client-IP"),
+		"CF-Connecting-IP": c.Request.Header.Get("CF-Connecting-IP"),
+		"X-Forwarded-For":  c.Request.Header.Get("X-Forwarded-For"),
+		"X-Real-IP":        c.Request.Header.Get("X-Real-IP"),
+		"Cookie":           c.Request.Header.Get("Cookie"),
 	}
 
 	// Rate limiter'da kullanılan IP'yi de göster
@@ -40,10 +35,10 @@ func (h *Handler) IPTestEndpoint(c *gin.Context) {
 	}
 
 	// Log da at ki console'da görebilelim
-	log.Printf("[IP-TEST] Client: %s | CF: %s | Country: %s",
+	log.Printf("[IP-TEST] Client: %s | CF: %s | X-Forwarded-For: %s",
 		clientIP,
 		headers["CF-Connecting-IP"],
-		headers["CF-IPCountry"])
+		headers["X-Forwarded-For"])
 
 	c.JSON(200, response)
 }
