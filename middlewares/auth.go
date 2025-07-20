@@ -4,6 +4,7 @@ package middlewares
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -24,6 +25,7 @@ func AuthMiddleware(uRepo *userRepo.Repository, tRepo *tokenRepo.Repository) gin
 		// 1. Access token'ı cookie'den oku.
 		accessToken, err := c.Cookie(configs.ACCESS_TOKEN_NAME)
 		if err != nil {
+			fmt.Println("Access token not found")
 			// Access token yoksa, doğrudan yenileme sürecine geç.
 			handleTokenRenewal(c, uRepo, tRepo)
 			return
@@ -32,6 +34,8 @@ func AuthMiddleware(uRepo *userRepo.Repository, tRepo *tokenRepo.Repository) gin
 		// 2. Access token'ı doğrula.
 		claims, err := utils.ValidateAccessToken(accessToken)
 		if err != nil {
+			fmt.Println("Access token not found")
+
 			// Token süresi dolmuşsa, yenileme sürecine geç.
 			if errors.Is(err, jwt.ErrTokenExpired) {
 				handleTokenRenewal(c, uRepo, tRepo)

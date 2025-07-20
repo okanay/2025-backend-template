@@ -9,7 +9,7 @@ const (
 	PROJECT_NAME = "Backend Template"
 
 	// TIMEOUT RULES
-	REQUEST_MAX_DURATION = 20 * time.Second
+	REQUEST_MAX_DURATION = 120 * time.Second
 
 	// RATE LIMIT RULES
 	RATE_LIMIT_CLEANUP_DURATION = 1 * time.Hour

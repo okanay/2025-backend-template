@@ -1,3 +1,5 @@
+CREATE TYPE file_status AS ENUM ('pending', 'active', 'deleted');
+
 -- DOSYA TABLOLARI (Tüm dosyalar için genel tablo)
 CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY,
@@ -6,7 +8,7 @@ CREATE TABLE IF NOT EXISTS files (
     filename TEXT NOT NULL, -- Orijinal dosya adı
     file_category TEXT, -- 'cv', 'cover_letter', 'certificate', 'image', vb.
     size_in_bytes INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'active', 'deleted', 'orphaned'
+    status file_status NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW () NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW () NOT NULL,
     UNIQUE (url)

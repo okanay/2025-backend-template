@@ -15,7 +15,7 @@ func CorsConfig() gin.HandlerFunc {
 	}
 
 	if gin.Mode() == gin.DebugMode {
-		origins = append(origins, "http://localhost:3000")
+		origins = append(origins, "http://localhost:3000", "http://localhost:8788")
 	}
 
 	return cors.New(cors.Config{

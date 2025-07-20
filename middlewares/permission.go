@@ -13,7 +13,7 @@ import (
 )
 
 var PermissionMap = map[string]types.Permission{
-	"GET:/v1/test/ip-address": types.CanGetIP,
+	// "GET:/v1/test/ip-address": types.CanGetIP,
 
 	// File Routes
 	"GET:/v1/files":                 types.CanListFiles,

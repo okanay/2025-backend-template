@@ -6,6 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type FileStatus string
+
+const (
+	FileStatusPending FileStatus = "Pending"
+	FileStatusSuccess FileStatus = "Success"
+	FileStatusError   FileStatus = "Error"
+)
+
 // File dosya tablosundaki kayıtlar için
 type File struct {
 	ID           uuid.UUID `json:"id"`
