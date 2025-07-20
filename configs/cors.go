@@ -10,7 +10,6 @@ func CorsConfig() gin.HandlerFunc {
 		"https://www.hoi.com.tr",
 		"https://tanstack.hoi.com.tr",
 		"https://hoi.com.tr",
-		"hoi.com.tr",
 	}
 
 	if gin.Mode() == gin.DebugMode {
