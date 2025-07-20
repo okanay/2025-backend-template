@@ -28,7 +28,7 @@ jobs:
 
             echo "🔍 Go version: $($GO_BIN version)"
 
-            cd ~/backend-template
+            cd ~/2025-backend-template
             echo "📁 Current directory: $(pwd)"
 
             echo "📥 Pulling latest changes..."
