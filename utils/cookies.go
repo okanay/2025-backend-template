@@ -10,16 +10,7 @@ import (
 func SetAuthCookies(c *gin.Context, accessToken, refreshToken string) {
 	var secure bool
 	var domain string
-
-	if gin.Mode() == gin.ReleaseMode {
-		// --- Production Ayarları ---
-		secure = true
-		domain = os.Getenv("COOKIE_DOMAIN")
-	} else {
-		// --- Development Ayarları ---
-		secure = false
-		domain = "localhost"
-	}
+	domain = os.Getenv("COOKIE_DOMAIN")
 
 	// Access Token Cookie'sini Ayarla
 	c.SetCookie(
