@@ -1,0 +1,56 @@
+name: Deploy to Ubuntu Server
+
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+          port: ${{ secrets.PORT }}
+          script: |
+            echo "🚀 Starting deployment..."
+
+            # Go'nun tam yolunu kullan
+            GO_BIN="/usr/local/go/bin/go"
+
+            echo "🔍 Go version: $($GO_BIN version)"
+
+            cd ~/backend-template
+            echo "📁 Current directory: $(pwd)"
+
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+
+            echo "🔨 Building application..."
+            $GO_BIN build main.go
+
+            if [ $? -eq 0 ]; then
+              echo "✅ Build successful! Restarting service..."
+              sudo systemctl restart backend-template
+              sleep 3
+
+              if sudo systemctl is-active --quiet backend-template; then
+                echo "🎉 Deployment successful! Service is running."
+                sudo systemctl status backend-template --no-pager -l
+              else
+                echo "❌ Service failed to start!"
+                sudo systemctl status backend-template --no-pager -l
+                exit 1
+              fi
+            else
+              echo "❌ Build failed!"
+              exit 1
+            fi
