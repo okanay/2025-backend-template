@@ -1,14 +1,13 @@
 package utils
 
 import (
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/okanay/backend-template/configs"
 	"github.com/okanay/backend-template/types"
 )
@@ -111,16 +110,11 @@ func ExtractClaims(tokenString string) (*types.TokenClaims, error) {
 }
 
 func GenerateRefreshToken() (string, error) {
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, configs.REFRESH_TOKEN_LENGTH)
-	for i := range b {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
-		if err != nil {
-			return "", err
-		}
-		b[i] = alphabet[num.Int64()]
+	token, err := uuid.NewV7()
+	if err != nil {
+		return "", err
 	}
-	return string(b), nil
+	return token.String(), nil
 }
 
 func ShouldRefreshToken(tokenString string) (bool, error) {
