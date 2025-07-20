@@ -34,23 +34,23 @@ jobs:
             echo "==================="
 
             # Toplam request sayısı
-            TOTAL_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "GET\|POST\|PUT\|DELETE\|PATCH" )
+            TOTAL_REQUESTS=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "GET\|POST\|PUT\|DELETE\|PATCH" )
             echo "🔢 Total Requests: $TOTAL_REQUESTS"
 
             # GET requests
-            GET_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "GET" )
+            GET_REQUESTS=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "GET" )
             echo "🔍 GET Requests: $GET_REQUESTS"
 
             # POST requests
-            POST_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "POST" )
+            POST_REQUESTS=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "POST" )
             echo "📝 POST Requests: $POST_REQUESTS"
 
             # PUT/PATCH requests
-            UPDATE_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -E "PUT|PATCH" )
+            UPDATE_REQUESTS=$(sudo journalctl -u backend-template --since today --no-pager | grep -c -E "PUT|PATCH" )
             echo "✏️ Update Requests (PUT/PATCH): $UPDATE_REQUESTS"
 
             # DELETE requests
-            DELETE_REQUESTS=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "DELETE" )
+            DELETE_REQUESTS=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "DELETE" )
             echo "🗑️ DELETE Requests: $DELETE_REQUESTS"
 
             echo ""
@@ -60,27 +60,27 @@ jobs:
             echo "===================="
 
             # 200 (Success)
-            SUCCESS_200=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 200 |" )
+            SUCCESS_200=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "| 200 |" )
             echo "✅ 200 Success: $SUCCESS_200"
 
             # 201 (Created)
-            CREATED_201=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 201 |" )
+            CREATED_201=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "| 201 |" )
             echo "🆕 201 Created: $CREATED_201"
 
             # 400 (Bad Request)
-            BAD_REQUEST_400=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 400 |" )
+            BAD_REQUEST_400=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "| 400 |" )
             echo "⚠️ 400 Bad Request: $BAD_REQUEST_400"
 
             # 401 (Unauthorized)
-            UNAUTHORIZED_401=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 401 |" )
+            UNAUTHORIZED_401=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "| 401 |" )
             echo "🔒 401 Unauthorized: $UNAUTHORIZED_401"
 
             # 404 (Not Found)
-            NOT_FOUND_404=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 404 |" )
+            NOT_FOUND_404=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "| 404 |" )
             echo "❌ 404 Not Found: $NOT_FOUND_404"
 
             # 500 (Server Error)
-            SERVER_ERROR_500=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "| 500 |" )
+            SERVER_ERROR_500=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "| 500 |" )
             echo "🚨 500 Server Error: $SERVER_ERROR_500"
 
             echo ""
@@ -90,7 +90,7 @@ jobs:
             echo "========================"
 
             # GET endpoints (top 10)
-            sudo journalctl -u backend-template-api --since today --no-pager | \
+            sudo journalctl -u backend-template --since today --no-pager | \
             grep "GET" | \
             grep -o "GET[[:space:]]*[^[:space:]]*" | \
             sort | uniq -c | sort -rn | head -10 | \
@@ -104,7 +104,7 @@ jobs:
             echo "======================"
 
             # Unique IP sayısını bul
-            UNIQUE_IPS=$(sudo journalctl -u backend-template-api --since today --no-pager | \
+            UNIQUE_IPS=$(sudo journalctl -u backend-template --since today --no-pager | \
                 grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
                 sort -u | wc -l)
             echo "🌐 Unique IP Addresses: $UNIQUE_IPS"
@@ -112,7 +112,7 @@ jobs:
             # En çok istek atan ilk 5 IP adresini göster
             echo ""
             echo "🔝 TOP 5 IP ADDRESSES:"
-            sudo journalctl -u backend-template-api --since today --no-pager | \
+            sudo journalctl -u backend-template --since today --no-pager | \
                 grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
                 sort | uniq -c | sort -rn | head -5 | \
                 awk '{printf "🏠 %s: %s requests\n", $2, $1}'
@@ -124,11 +124,11 @@ jobs:
             echo "========================="
 
             # Microsecond responses (µs)
-            MICRO_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "µs |" )
+            MICRO_RESPONSES=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "µs |" )
             # Millisecond responses (ms)
-            MS_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c "ms |" )
+            MS_RESPONSES=$(sudo journalctl -u backend-template --since today --no-pager | grep -c "ms |" )
             # Second responses (s) - eğer varsa
-            SEC_RESPONSES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -E "[0-9]+s \|" )
+            SEC_RESPONSES=$(sudo journalctl -u backend-template --since today --no-pager | grep -c -E "[0-9]+s \|" )
 
             echo "Microsecond responses (µs): $MICRO_RESPONSES ⚡"
             echo "Millisecond responses (ms): $MS_RESPONSES 🏃"
@@ -139,7 +139,7 @@ jobs:
             echo "📊 Response Time Details:"
 
             # Tüm ms cinsinden response sürelerini al ve average hesapla
-            RESPONSE_TIMES=$(sudo journalctl -u backend-template-api --since today --no-pager | grep "ms |" | grep -o "[0-9]\+\.[0-9]\+ms" | sed 's/ms//g')
+            RESPONSE_TIMES=$(sudo journalctl -u backend-template --since today --no-pager | grep "ms |" | grep -o "[0-9]\+\.[0-9]\+ms" | sed 's/ms//g')
             if [ -n "$RESPONSE_TIMES" ]; then
                 TOTAL=0
                 COUNT=0
@@ -158,7 +158,7 @@ jobs:
             fi
 
             # Örnek response süreleri (ilk 10)
-            sudo journalctl -u backend-template-api --since today --no-pager | \
+            sudo journalctl -u backend-template --since today --no-pager | \
             grep "ms |" | \
             grep -o "[0-9]\+\.[0-9]\+ms" | \
             head -10 | \
@@ -173,17 +173,17 @@ jobs:
             echo "================="
 
             # Gin errors
-            ERROR_COUNT=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -i "error" )
+            ERROR_COUNT=$(sudo journalctl -u backend-template --since today --no-pager | grep -c -i "error" )
             echo "❌ Total Errors: $ERROR_COUNT"
 
             # Panic logs
-            PANIC_COUNT=$(sudo journalctl -u backend-template-api --since today --no-pager | grep -c -i "panic" )
+            PANIC_COUNT=$(sudo journalctl -u backend-template --since today --no-pager | grep -c -i "panic" )
             echo "💥 Panic Count: $PANIC_COUNT"
 
             if [ "$ERROR_COUNT" -gt 0 ]; then
                 echo ""
                 echo "🔍 RECENT ERRORS (Last 5):"
-                sudo journalctl -u backend-template-api --since today --no-pager | grep -i "error" | tail -5
+                sudo journalctl -u backend-template --since today --no-pager | grep -i "error" | tail -5
             fi
 
             echo ""
@@ -193,7 +193,7 @@ jobs:
             echo "================="
 
             # Service uptime
-            SERVICE_UPTIME=$(sudo systemctl show backend-template-api --property=ActiveEnterTimestamp | cut -d'=' -f2)
+            SERVICE_UPTIME=$(sudo systemctl show backend-template --property=ActiveEnterTimestamp | cut -d'=' -f2)
             echo "🕐 Service Started: $SERVICE_UPTIME"
 
             # Memory usage (düzeltildi)
