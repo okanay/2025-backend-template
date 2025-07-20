@@ -1,89 +1,167 @@
-# Middlewares (/middlewares)
+# Authentication & Authorization Middleware
 
-Bu dizin, projenin Gin web çatısı üzerine kurulu olan ve gelen HTTP isteklerini işleyen ara katman yazılımlarını (middlewares) içerir. Middleware'ler, ana handler fonksiyonu çalışmadan önce veya sonra belirli görevleri yerine getirmek için bir zincir (chain) halinde çalışır.
+Bu klasör, uygulamanın kimlik doğrulama (authentication) ve yetkilendirme (authorization) katmanlarını içerir. Her middleware'in belirli bir sorumluluğu vardır ve birlikte güvenli bir sistem oluştururlar.
 
-## Middleware Zinciri ve Çalışma Sırası
+## 📋 İçindekiler
 
-`main.go` dosyasında tanımlanan middleware'ler, eklendikleri sırayla çalışır. Bu sıra, güvenlik ve performans için kritik öneme sahiptir. Projemizdeki genel sıralama şöyledir:
+- [AuthMiddleware](#authmiddleware)
+- [OptionalAuthMiddleware](#optionalauthmiddleware)
+- [RequireRoleMiddleware](#requirerolemiddleware)
+- [PermissionMiddleware](#permissionmiddleware)
+- [RateLimitMiddleware](#ratelimitmiddleware)
+- [TurnstileCaptchaMiddleware](#turnstilecaptchamiddleware)
+- [TimeoutMiddleware](#timeoutmiddleware)
 
-### Global Middleware'ler (Tüm isteklerde çalışır)
-- **TimeoutMiddleware**: İsteğin tamamı için bir zaman aşımı belirler.
-- **SecureConfig**: Güvenlik başlıkları (headers) ekler.
-- **CorsConfig**: Cross-Origin Resource Sharing kurallarını belirler.
-- **RateLimiterMiddleware**: IP bazlı istek limiti uygular.
+---
 
-### Protected Route Middleware'leri (Kimlik doğrulaması gerektiren rotalarda çalışır)
-- **AuthMiddleware**: Kullanıcının kimliğini doğrular.
-- **PermissionMiddleware**: Kimliği doğrulanmış kullanıcının belirli bir işlemi yapma yetkisini kontrol eder.
+## AuthMiddleware
 
-## Middleware'ler ve Görevleri
+**Ana kimlik doğrulama katmanı** - Korumalı endpoint'lere sadece kimliği doğrulanmış kullanıcıların erişmesini sağlar.
 
-### TimeoutMiddleware
+### 🎯 Amaç
+Sadece geçerli oturuma sahip kullanıcıların korumalı rotalara erişebilmesini garantiler.
 
-- **Dosya**: `timeout.go`
-- **Amaç**: Sunucuya gelen her isteğin, `configs/constants.go` içinde tanımlanan `REQUEST_MAX_DURATION` süresini aşmamasını garanti eder. Eğer bir istek bu sürede tamamlanmazsa, 408 Request Timeout hatası ile sonlandırılır. Bu, sunucunun yavaş veya takılmış istekler tarafından meşgul edilmesini önler.
+### ⚙️ Çalışma Mantığı
 
-### RateLimiterMiddleware
+1. **Access Token Kontrolü**
+   - Cookie'lerde `access_token` arar
+   - Token geçerliyse → kullanıcı bilgilerini context'e ekler
 
-- **Dosya**: `rate-limit.go`
-- **Amaç**: Kötü niyetli veya hatalı çalışan istemcilerin sunucuya çok kısa sürede aşırı sayıda istek göndermesini (Brute Force, DDoS saldırıları) engeller.
-- **Nasıl Çalışır?**: Her bir istemci IP adresi için belirli bir zaman aralığında yapılabilecek maksimum istek sayısını takip eder. Limit aşıldığında 429 Too Many Requests hatası döndürür.
+2. **Refresh Token Fallback**
+   - Access token yoksa/geçersizse → `refresh_token` kontrol eder
+   - Refresh token geçerliyse → yeni access token oluşturur
 
-### AuthMiddleware
+3. **Yetkisiz Erişim**
+   - Her iki token da geçersizse → `401 Unauthorized` döndürür
 
-- **Dosya**: `auth.go`
-- **Amaç**: Korunmuş rotalara erişmeye çalışan kullanıcının kimliğini doğrulamak. Bu, projenin en kritik güvenlik katmanlarından biridir.
-- **Nasıl Çalışır?**:
-  - İstekle birlikte gelen `access_token` cookie'sini kontrol eder.
-  - **Access Token Geçerliyse**: Token içindeki kullanıcı bilgilerini (`user_id`, `user_role`) ayıklar, Gin context'ine ekler ve isteğin devam etmesine izin verir.
-  - **Access Token Geçersiz veya Süresi Dolmuşsa**: Bu kez `refresh_token` cookie'sini kontrol eder.
-  - **Refresh Token Geçerliyse**: Veritabanından bu token'ın geçerliliğini doğrular, kullanıcı için yeni bir `access_token` üretir, cookie'leri günceller ve isteğin devam etmesine izin verir.
-  - **Her İki Token da Geçersizse**: 401 Unauthorized hatası döndürerek isteği sonlandırır.
+### 🚫 Önemli Not
+"Ya hep ya hiç" prensibiyle çalışır - misafir erişimine izin vermez.
 
-### PermissionMiddleware
+---
 
-- **Dosya**: `permission.go`
-- **Amaç**: AuthMiddleware tarafından kimliği doğrulanmış bir kullanıcının, erişmeye çalıştığı rota için gerekli izne sahip olup olmadığını kontrol eder. Rol bazlı kontrolden (RequireRole) daha granüler ve esnek bir yetkilendirme sağlar.
-- **Nasıl Çalışır?**:
-  - Admin rolündeki kullanıcıları her zaman yetkili kabul eder.
-  - Gelen isteğin `METHOD:PATH` kombinasyonunu (örn: `DELETE:/v1/files/:id`), `PermissionMap` adındaki merkezi haritada arar.
-  - Eğer rota için bir izin gerekiyorsa, kullanıcının izinlerini `CacheService.GetOrSet` metodunu kullanarak cache'den veya veritabanından getirir.
-  - Kullanıcının izin listesinde gerekli izin varsa isteğe devam eder, yoksa 403 Forbidden hatası döndürür.
+## OptionalAuthMiddleware
 
-### RequireRole
+**Esnek kimlik doğrulama** - Hem misafir hem de üye kullanıcıların erişebildiği rotalar için.
 
-- **Dosya**: `require-role.go`
-- **Amaç**: Belirli bir rotaya sadece belirli bir role (örn: Admin) sahip kullanıcıların erişebilmesini sağlar. PermissionMiddleware'e göre daha basit bir yetkilendirme yöntemidir.
+### 🎯 Amaç
+Kullanıcı durumuna göre farklı içerik sunulabilecek endpoint'ler için kimlik tespiti.
 
-### Captcha Middleware'leri
+### ⚙️ Çalışma Mantığı
 
-- **Dosyalar**: `turnstile-captcha.go`, `recaptcha.go`
-- **Amaç**: Kayıt olma, giriş yapma gibi kritik form işlemlerini bot saldırılarından korumak.
-- **Nasıl Çalışır?**: Frontend'den gelen captcha token'ını alır ve ilgili servise (Cloudflare veya Google) göndererek doğrulamasını yapar. Doğrulama başarısız olursa isteği 403 Forbidden hatası ile engeller.
+- **Başarılı doğrulama:** `is_authenticated: true` + kullanıcı bilgileri
+- **Başarısız doğrulama:** `is_authenticated: false`
+- **Her durumda:** İstek devam eder, handler içeriği belirler
 
-## Middleware Kullanım Örnekleri
+### 💡 Kullanım Örneği
+Blog yazısının misafire özet, üyeye tam metin gösterilmesi.
 
-### Global Middleware Tanımlama
-```go
-// main.go içinde
-router.Use(TimeoutMiddleware())
-router.Use(SecureConfig())
-router.Use(CorsConfig())
-router.Use(RateLimiterMiddleware())
+---
+
+## RequireRoleMiddleware
+
+**Rol tabanlı yetkilendirme** - Belirli rollere sahip kullanıcıları filtreler.
+
+### 🎯 Amaç
+Rotaları sadece belirli kullanıcı rollerine (Admin, Moderator vb.) açmak.
+
+### ⚙️ Çalışma Mantığı
+
+1. Context'ten `user_role` okur (AuthMiddleware'den gelir)
+2. Rolün izin verilen roller listesinde olup olmadığını kontrol eder
+3. Uygun değilse → `403 Forbidden` döndürür
+
+### 📌 Gereksinim
+AuthMiddleware'den **sonra** çalışmalıdır.
+
+---
+
+## PermissionMiddleware
+
+**Granüler yetkilendirme** - Spesifik eylem izinlerini kontrol eder.
+
+### 🎯 Amaç
+Rol bağımsız, detaylı izin kontrolü (`files:upload`, `posts:delete` gibi).
+
+### ⚙️ Çalışma Mantığı
+
+1. Context'ten `user_id` okur
+2. **Cache kontrolü:** Redis'te kullanıcı izinlerini arar
+3. **Database fallback:** Cache'te yoksa veritabanından çeker
+4. **İzin kontrolü:** Gerekli iznin varlığını doğrular
+5. İzin yoksa → `403 Forbidden` döndürür
+
+### 🚀 Performans
+Redis cache kullanarak veritabanı yükünü azaltır.
+
+---
+
+## RateLimitMiddleware
+
+**Hız sınırlama** - DoS saldırılarını ve kötüye kullanımı önler.
+
+### 🎯 Amaç
+İstemci başına belirli zaman aralığında maksimum istek sayısı sınırı.
+
+### ⚙️ Çalışma Mantığı
+
+1. **IP tespiti:** İsteği yapan gerçek IP adresini bulur
+2. **Sayaç kontrolü:** Redis'te IP bazlı istek sayacını kontrol eder
+3. **Limit kontrolü:** Belirlenen sınır (örn: 60 istek/dakika) aşılmış mı?
+4. Limit aşıldıysa → `429 Too Many Requests` döndürür
+
+### ⚡ Önlem
+Sunucu kaynaklarını korur ve servis kalitesini garanti eder.
+
+---
+
+## TurnstileCaptchaMiddleware
+
+**Bot koruması** - Cloudflare Turnstile ile insan/bot ayrımı.
+
+### 🎯 Amaç
+Otomatik botları ve spam'i engelleyerek form güvenliği sağlar.
+
+### ⚙️ Çalışma Mantığı
+
+1. **Token okuma:** Request body'den `cf-turnstile-response` token'ını alır
+2. **Cloudflare doğrulama:** Token'ı secret key ile Cloudflare API'sine gönderir
+3. **Sonuç değerlendirme:**
+   - Başarılı → İstek devam eder
+   - Başarısız → `403 Forbidden` döndürür
+
+### 🔒 Kullanım Alanları
+Kayıt, giriş, iletişim formları gibi kritik işlemler.
+
+---
+
+## TimeoutMiddleware
+
+**Zaman aşımı koruması** - Uzun süren istekleri sonlandırır.
+
+### 🎯 Amaç
+Takılıp kalan veya çok yavaş isteklerin sunucu kaynaklarını tüketmesini engeller.
+
+### ⚙️ Çalışma Mantığı
+
+1. **Timeout tanımlama:** Her istek için context'e zaman sınırı koyar
+2. **Süre kontrolü:** Handler'ın işlem süresi takip edilir
+3. **Zaman aşımı:** Belirlenen süre aşılırsa context iptal edilir
+4. **Hata yanıtı:** `503 Service Unavailable` döndürür
+
+### ⏱️ Sonuç
+Sunucu stabilitesi ve kaynak yönetimi sağlanır.
+
+---
+
+## 🔗 Middleware Zinciri Örneği
+
+```
+Request → TimeoutMiddleware → RateLimitMiddleware → AuthMiddleware → RequireRoleMiddleware → PermissionMiddleware → Handler
 ```
 
-### Protected Route Middleware Tanımlama
-```go
-// Kimlik doğrulaması gerektiren route grubu
-protected := router.Group("/api/v1")
-protected.Use(AuthMiddleware())
-protected.Use(PermissionMiddleware())
-```
+## 📝 Notlar
 
-### Rol Bazlı Middleware Tanımlama
-```go
-// Sadece admin kullanıcıların erişebileceği rotalar
-adminOnly := router.Group("/admin")
-adminOnly.Use(AuthMiddleware())
-adminOnly.Use(RequireRole("admin"))
-```
+- Middleware'ler belirli bir sırayla çalışmalıdır
+- Her middleware bir sonraki katmana geçmeden önce kendi kontrollerini yapar
+- Hata durumunda istek zinciri kesilir ve uygun HTTP status kodu döndürülür
+- Cache kullanımı (Redis) performans için kritiktir

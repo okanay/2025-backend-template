@@ -1,64 +1,273 @@
-# Go & Gin Backend Şablonu (2025)
+# 🚀 Go Backend Şablonu
 
-Bu proje, yüksek performanslı **Gin** web çatısı üzerine inşa edilmiş, modern ve zengin özelliklere sahip bir Go backend başlangıç şablonudur. Amacı, her yeni projede ihtiyaç duyulan temel sistemleri (kimlik doğrulama, cache, dosya yükleme, arka plan görevleri vb.) en iyi pratiklerle standart hale getirerek geliştirme sürecini dramatik bir şekilde hızlandırmaktır.
+Modern, ölçeklenebilir ve güvenli web uygulamaları ile API'ler geliştirmek için tasarlanmış **üretime hazır** Go backend şablonu. Kanıtlanmış mimari desenleri ve en iyi pratikleri kullanarak yeni projelere hızlı başlangıç sağlar.
 
-## Çekirdek Motor: Gin Web Framework
+## 🏗️ Mimari Felsefesi
 
-Proje, gücünü ve hızını Go ekosisteminin en popüler ve sevilen web çatılarından biri olan [Gin](https://gin-gonic.com/)'den alır. Gin sayesinde, minimum eforla son derece performanslı, ölçeklenebilir ve yönetimi kolay API'lar geliştirebilirsiniz. Bu şablon, Gin'in esnek middleware altyapısını sonuna kadar kullanır.
+Bu proje, **Temiz Mimari** (Clean Architecture) prensiplerinden ilham alan **Katmanlı Mimari** (Layered Architecture) üzerine kurulmuştur.
 
-## ✨ Şablonun Yetenekleri
+### 🎯 Temel Hedefler
 
-Bu şablon, bir backend uygulamasında ihtiyaç duyabileceğiniz birçok kabiliyeti kutudan çıktığı gibi sunar:
+- **🔄 Sorumlulukların Ayrılığı:** Her katmanın (sunum, iş mantığı, veri erişim) net ve tek sorumluluğu
+- **⬆️ Bağımlılık Kuralı:** Bağımlılıklar daima dış → iç katmanlara doğrudur
+- **♻️ Yeniden Kullanılabilirlik:** Merkezi iş mantığı farklı sunum katmanları tarafından kullanılabilir
 
-### 1. Gelişmiş Kimlik Doğrulama ve Yetkilendirme
+## ✨ Öne Çıkan Özellikler
 
-Sadece "giriş yapma" değil, tam kapsamlı ve güvenli bir oturum yönetimi altyapısı sunar.
+### 🔐 Gelişmiş Kimlik Doğrulama
+- JWT tabanlı Access/Refresh Token mekanizması
+- HttpOnly cookie'ler ile güvenli oturum yönetimi
 
-* **JWT & Güvenli Cookie'ler:** Oturumlar, kısa ömürlü `access_token` ve uzun ömürlü `refresh_token` mekanizması ile yönetilir. Token'lar, XSS saldırılarına karşı korumalı `HttpOnly` ve `Secure` cookie'ler içinde saklanır.
-* **Sosyal Medya ile Giriş (OAuth):** Google, Apple gibi popüler sağlayıcılar üzerinden kolayca giriş yapma altyapısı `goth` kütüphanesi ile entegre edilmiştir.
-* **Detaylı İzin Sistemi (Permissions):** Standart `Admin`, `User` gibi rollerin ötesinde, "dosya silebilir", "blog yayınlayabilir" gibi çok daha granüler yetkileri (`file:delete`, `blog:publish`) kullanıcılara atamanızı sağlayan güçlü bir `PermissionMiddleware` içerir.
+### 🌐 Sosyal Giriş (OAuth)
+- Goth kütüphanesi ile Google, GitHub entegrasyonu
+- Kolayca genişletilebilir sosyal giriş altyapısı
 
-### 2. Yüksek Performanslı ve Değiştirilebilir Cache
+### 🛡️ Granüler Yetkilendirme
+- **Rol tabanlı:** Admin, User gibi basit roller
+- **Aksiyon bazlı:** `posts:create`, `files:upload` gibi detaylı izinler
 
-Uygulamanızın hızını ve veritabanı yükünü dramatik şekilde optimize eden, ortamınıza göre seçebileceğiniz bir cache katmanı sunar.
+### 📁 Güvenli Dosya Yükleme
+- Cloudflare R2 için ön-imzalı URL (presigned URL)
+- Dosyalar doğrudan istemciden R2'ye yüklenir
+- Sunucu darboğaz olmaktan çıkar
 
-* **Redis Desteği:** Üretim (production) ortamları için ideal, dağıtık ve kalıcı bir cache altyapısı.
-* **In-Memory Cache Desteği:** Geliştirme (development) ortamları için harici bir bağımlılık gerektirmeyen, basit ve hızlı bir hafıza içi cache.
-* **Akıllı `GetOrSet` Deseni:** "Veri cache'de var mı? Yoksa veritabanından al, cache'e yaz ve sonra döndür" şeklindeki tekrar eden mantığı tek bir fonksiyonda toplayarak kod tekrarını önler.
+### ⏰ Asenkron & Zamanlanmış Görevler
+- Periyodik işlemler (günlük raporlama, veri temizleme)
+- Kilit mekanizmalı otomasyon servisi
 
-### 3. Asenkron ve Zamanlanmış Görevler (Automation)
+### 🗄️ Veritabanı Migrasyonları
+- `golang-migrate` ile SQL tabanlı migrasyon
+- Versiyon kontrollü şema yönetimi
 
-Uygulamanızın arka planda veya gelecekte bir zamanda işler yapmasını sağlayan güçlü bir otomasyon motoru içerir.
+### ⚡ Performans Odaklı Caching
+- Redis entegrasyonu
+- Sık erişilen verilerin önbelleğe alınması
 
-* **Periyodik Görevler (Cron Jobs):** "Her gece 03:00'te veritabanını yedekle" veya "her saat başı eski logları temizle" gibi rutin sistem işlerini `Add` fonksiyonu ile kolayca tanımlayın.
-* **Tek Seferlik Planlanmış Görevler:** "Bu blog yazısını Cuma günü saat 14:30'da yayınla" gibi kullanıcıya özel, dinamik görevleri `Schedule` fonksiyonu ile planlayın.
-* **Güvenli ve Yönetilebilir:** Tüm görevler, aynı anda iki kez çalışmalarını önleyen bir kilitleme mekanizmasına sahiptir ve `Trigger` komutuyla manuel olarak tetiklenebilirler.
+### 🔄 CI/CD Entegrasyonu
+- GitHub Actions ile otomatik test, build ve deployment
+- Hazır iş akışları
 
-### 4. Modern ve Güvenli Dosya Yükleme (Cloudflare R2 Entegrasyonu)
+### 🌍 Edge Logic (Cloudflare Workers)
+- R2 varlıklarının sunulması
+- Bot koruması ve A/B testi
+- Edge'de çalışan TypeScript mantığı
 
-Büyük dosyaların backend sunucunuzu yormasını engelleyen, modern ve ölçeklenebilir bir dosya yükleme mimarisi sunar.
+### 🔒 Güvenlik Odaklı Middlewares
+- Rate Limiting (hız sınırlama)
+- Timeout koruması
+- CORS yapılandırması
+- Cloudflare Turnstile bot koruması
 
-1.  **Güvenli URL Talebi:** Frontend, backend'den dosyayı yüklemek için süresi kısıtlı ve güvenli bir **"Presigned URL"** talep eder.
-2.  **Doğrudan Yükleme:** Frontend, aldığı bu URL ile dosyayı sunucunuzu **bypass ederek** doğrudan Cloudflare R2'ye yükler. Bu, sunucu kaynaklarınızı korur ve performansı artırır.
-3.  **Onaylama:** Yükleme bitince frontend backend'e haber verir ve dosya metadatası veritabanına kaydedilir.
+## 🛠️ Teknoloji Mimarisi
 
-### 5. Zengin Middleware Katmanı
+| Kategori | Teknoloji |
+|----------|-----------|
+| **Dil & Framework** | Go, Gin Web Framework |
+| **Veritabanı** | PostgreSQL |
+| **Cache** | Redis |
+| **Dosya Depolama** | Cloudflare R2 |
+| **Deployment** | Hetzner Ubuntu VPS, Nginx |
+| **CI/CD** | GitHub Actions |
+| **Edge & DNS** | Cloudflare (Workers, R2) |
+| **Auth** | JWT, Goth (OAuth 2.0) |
 
-Uygulamanızın güvenliğini ve kararlılığını artıran, Gin ile tam uyumlu, kullanıma hazır bir middleware koleksiyonu içerir.
+## 📂 Proje Yapısı
 
-* **Rate Limiter:** Kötü niyetli botlara ve brute-force saldırılarına karşı IP bazlı istek sınırlaması.
-* **Timeout:** Bir isteğin sunucuyu çok uzun süre meşgul etmesini önleyen zaman aşımı kontrolü.
-* **CORS & Güvenlik Başlıkları:** Tarayıcılar için Cross-Origin Resource Sharing ve diğer temel güvenlik başlıklarını (`XSS-Protection`, `Frame-Options` vb.) yönetir.
-* **Captcha Doğrulaması:** Cloudflare Turnstile ve Google reCAPTCHA entegrasyonları ile bot koruması.
+```
+├── cmd/                    # 🎯 Derlenebilir ana giriş noktaları
+│   └── migrate/           # Database migration CLI aracı
+├── configs/               # ⚙️ Sabitler ve statik konfigürasyonlar
+├── database/              # 🗄️ Veritabanı bağlantısı ve migrasyonlar
+│   └── migrations/        # SQL migrasyon dosyaları
+├── handlers/              # 🌐 Sunum Katmanı (HTTP handlers)
+├── middlewares/           # 🔗 Gin ara katmanları
+├── repositories/          # 💾 Veri Erişim Katmanı
+├── services/              # 🧠 İş Mantığı Katmanı
+├── types/                 # 📋 Veri yapıları ve enum'lar
+├── utils/                 # 🛠️ Yardımcı fonksiyonlar
+├── workers/               # ☁️ Cloudflare Workers (TypeScript)
+├── .github/workflows/     # 🤖 GitHub Actions CI/CD
+└── main.go               # 🚀 Ana giriş noktası
+```
 
-## 🚀 Başlarken
+### 📁 Katman Detayları
 
-1.  **`.env` Dosyasını Oluşturun:** `.env.example` dosyasını kopyalayarak `.env` adında yeni bir dosya oluşturun ve içindeki değerleri kendi yapılandırmanıza göre doldurun.
-2.  **Veritabanı Migration'larını Çalıştırın:**
-    ```bash
-    go run ./cmd/migrate up_all
-    ```
-3.  **Uygulamayı Başlatın:**
-    ```bash
-    go run main.go
-    ```
+#### `/cmd` - 🎯 Giriş Noktaları
+Projenin derlenebilir ana giriş noktalarını içerir.
+
+#### `/configs` - ⚙️ Konfigürasyonlar
+- `constants.go` - Proje sabitleri
+- CORS, güvenlik başlıkları gibi statik ayarlar
+
+#### `/database` - 🗄️ Veritabanı
+- `init.go` - Veritabanı bağlantısı
+- `/migrations` - Şema değişiklikleri
+
+#### `/handlers` - 🌐 Sunum Katmanı
+- HTTP isteklerini alır
+- Veri doğrulaması yapar
+- Servisleri çağırır
+- JSON yanıtı döndürür
+
+#### `/middlewares` - 🔗 Ara Katmanlar
+Kimlik doğrulama, yetkilendirme, loglama gibi tüm istekleri etkileyen mantıklar
+
+#### `/repositories` - 💾 Veri Erişim Katmanı
+- Veritabanı iletişimini soyutlar
+- SQL sorgularını içerir
+- Servis katmanının veritabanı detaylarından habersiz kalmasını sağlar
+
+#### `/services` - 🧠 İş Mantığı Katmanı
+- Uygulamanın çekirdek mantığı
+- Repository'leri kullanarak iş akışlarını tamamlar
+
+#### `/types` - 📋 Veri Yapıları
+- Struct'lar ve enum'lar
+- API istek/yanıt modelleri
+- Veritabanı tablolarının Go karşılıkları
+
+#### `/utils` - 🛠️ Yardımcı Fonksiyonlar
+- JWT oluşturma
+- Şifre hash'leme
+- Cookie yönetimi
+- Katmandan bağımsız tekrar kullanılabilir kodlar
+
+#### `/workers` - ☁️ Cloudflare Workers
+- TypeScript tabanlı edge mantığı
+- Statik varlık sunumu
+- İstek filtreleme
+
+#### `/.github/workflows` - 🤖 CI/CD
+- `deploy.yml` - Otomatik deployment
+- `daily-analytics-report.yml` - Zamanlanmış görevler
+
+#### `main.go` - 🚀 Ana Dosya
+- Bağımlılık enjeksiyonu
+- Router ve middleware yapılandırması
+- Web sunucusu başlatma
+
+## 🚀 Kurulum ve Başlatma
+
+### 📋 Ön Gereksinimler
+
+```bash
+# Gerekli araçları kurun
+go install
+docker install
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+```
+
+### ⚙️ Yapılandırma
+
+1. **Ortam değişkenlerini ayarlayın:**
+   ```bash
+   cp .env.example .env
+   # .env dosyasını editleyerek değerleri kendinize göre düzenleyin
+   ```
+
+2. **Gerekli servisler:**
+   ```bash
+   # PostgreSQL ve Redis'i Docker ile başlatın
+   docker-compose up -d postgres redis
+   ```
+
+### 🗄️ Veritabanı Migrasyonları
+
+```bash
+# Veritabanı şemasını oluştur/güncelle
+go run cmd/migrate/main.go up
+
+# Migrasyon durumunu kontrol et
+go run cmd/migrate/main.go version
+
+# Son migrasyonu geri al
+go run cmd/migrate/main.go down 1
+```
+
+### 🚀 Sunucuyu Başlatma
+
+```bash
+# Bağımlılıkları kur
+go mod tidy
+
+# Sunucuyu başlat
+go run main.go
+
+# Veya derleyip çalıştır
+go build -o server main.go
+./server
+```
+
+### 🧪 Test
+
+```bash
+# Tüm testleri çalıştır
+go test ./...
+
+# Belirli bir paketi test et
+go test ./services/...
+
+# Test coverage
+go test -cover ./...
+```
+
+### 📦 Production Build
+
+```bash
+# Optimized build
+CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server main.go
+
+# Docker ile
+docker build -t myapp .
+docker run -p 8080:8080 myapp
+```
+
+## 🌍 Deployment
+
+Proje, Hetzner VPS + Nginx + Cloudflare kombinasyonu için optimize edilmiştir:
+
+1. **GitHub Actions** otomatik deployment'ı tetikler
+2. **Hetzner VPS**'e kod deploy edilir
+3. **Nginx** reverse proxy olarak çalışır
+4. **Cloudflare** CDN ve güvenlik sağlar
+
+## 📈 İzleme ve Loglama
+
+- Structured logging (JSON format)
+- Error tracking ve alerting
+- Performance metrics
+- Database query monitoring
+
+## 🤝 Katkıda Bulunma
+
+1. Fork'layın
+2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
+3. Değişikliklerinizi commit'leyin (`git commit -m 'Add amazing feature'`)
+4. Branch'inizi push'layın (`git push origin feature/amazing-feature`)
+5. Pull Request açın
+
+## 📄 Lisans
+
+Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için `LICENSE` dosyasına bakın.
+
+---
+
+## 🔗 Faydalı Linkler
+
+- [Go Documentation](https://golang.org/doc/)
+- [Gin Framework](https://gin-gonic.com/)
+- [PostgreSQL](https://www.postgresql.org/)
+- [Redis](https://redis.io/)
+- [Cloudflare R2](https://developers.cloudflare.com/r2/)
+- [JWT.io](https://jwt.io/)
+
+## 💡 SSS (Sık Sorulan Sorular)
+
+**S: Bu şablonu yeni bir proje için nasıl kullanırım?**
+A: Repository'yi fork'layın veya template olarak kullanın, `.env` dosyasını yapılandırın ve `go run main.go` ile başlatın.
+
+**S: Farklı bir veritabanı kullanabilir miyim?**
+A: Evet, repository katmanını değiştirerek MySQL, MongoDB gibi alternatifler kullanabilirsiniz.
+
+**S: Cloudflare yerine AWS S3 kullanabilir miyim?**
+A: Evet, `utils/` klasöründeki dosya upload fonksiyonlarını S3 için yeniden yazabilirsiniz.
