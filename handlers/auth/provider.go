@@ -160,11 +160,7 @@ func (h *Handler) CallbackHandler(c *gin.Context) {
 	utils.SetAuthCookies(c, accessToken, refreshToken)
 
 	// Frontend'e redirect et (veya JSON response dön)
-	frontendURL := "http://localhost:3000" // Development
-	if gin.Mode() == gin.ReleaseMode {
-		frontendURL = os.Getenv("FRONTEND_URL")
-	}
-
+	frontendURL := os.Getenv("FRONTEND_URL")
 	// Başarılı giriş sonrası frontend'e yönlendir
-	c.Redirect(http.StatusTemporaryRedirect, frontendURL+"/dashboard")
+	c.Redirect(http.StatusTemporaryRedirect, frontendURL)
 }
