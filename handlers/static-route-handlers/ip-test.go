@@ -13,12 +13,13 @@ func (h *Handler) IPTestEndpoint(c *gin.Context) {
 
 	// Tüm header bilgilerini topla
 	headers := map[string]string{
-		"CF-Connecting-IP": c.Request.Header.Get("CF-Connecting-IP"),
-		"CF-IPCountry":     c.Request.Header.Get("CF-IPCountry"),
-		"CF-Ray":           c.Request.Header.Get("CF-Ray"),
-		"X-Forwarded-For":  c.Request.Header.Get("X-Forwarded-For"),
-		"X-Real-IP":        c.Request.Header.Get("X-Real-IP"),
-		"True-Client-IP":   c.Request.Header.Get("True-Client-IP"),
+		"CF-Connecting-IP":   c.Request.Header.Get("CF-Connecting-IP"),
+		"CF-IPCountry":       c.Request.Header.Get("CF-IPCountry"),
+		"CF-Ray":             c.Request.Header.Get("CF-Ray"),
+		"X-Forwarded-For":    c.Request.Header.Get("X-Forwarded-For"),
+		"X-Forwarded-For-IP": c.Request.Header.Get("X-Forwarded-For-IP"),
+		"X-Real-IP":          c.Request.Header.Get("X-Real-IP"),
+		"True-Client-IP":     c.Request.Header.Get("True-Client-IP"),
 	}
 
 	// Rate limiter'da kullanılan IP'yi de göster
