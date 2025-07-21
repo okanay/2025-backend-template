@@ -12,6 +12,6 @@ func (h *Handler) Index(c *gin.Context) {
 		"Framework": "Gin",
 		"Database":  "PostgreSQL",
 		"Status":    "System is running successfully.",
-		"Version":   "1.0.2",
+		"Version":   "1.0.3",
 	})
 }
