@@ -1,18 +1,29 @@
-name: Deploy to Ubuntu Server
+name: Deploy to Production
 
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
+
+env:
+  # Sunucudaki ana proje klasörünüz
+  PROJECT_DIR: "/root/2025-backend-template"
+  # Systemd servisinizin tam adı
+  SERVICE_NAME: "backend-template.service"
+  # Yeni kodun test edileceği geçici port
+  TEST_PORT: 4041
+  # Sunucuda kaç eski versiyonun tutulacağı
+  KEEP_RELEASES: 5
+  # Uygulamanızın sağlık kontrolü için endpoint'i
+  HEALTH_CHECK_PATH: "/"
+  # Go build komutu
+  BUILD_COMMAND: "/usr/local/go/bin/go build -o main ."
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to server
+      - name: Deploy to Server
         uses: appleboy/ssh-action@v0.1.5
         with:
           host: ${{ secrets.HOST }}
@@ -21,36 +32,44 @@ jobs:
           passphrase: ${{ secrets.PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
-            echo "🚀 Starting deployment..."
+            set -e
 
-            # Go'nun tam yolunu kullan
-            GO_BIN="/usr/local/go/bin/go"
+            RELEASES_DIR="${{ env.PROJECT_DIR }}/releases"
+            CURRENT_LINK="${{ env.PROJECT_DIR }}/current"
+            RELEASE_ID=$(date +%Y%m%d%H%M%S)
+            RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 
-            echo "🔍 Go version: $($GO_BIN version)"
+            echo "🚀 Starting deployment of release: $RELEASE_ID"
 
-            cd ~/2025-backend-template
-            echo "📁 Current directory: $(pwd)"
-
-            echo "📥 Pulling latest changes..."
-            git pull origin main
-
+            # 1. Kodu klonla ve build et
+            sudo mkdir -p $RELEASE_DIR && cd $RELEASE_DIR
+            sudo git clone https://github.com/${{ github.repository }}.git .
             echo "🔨 Building application..."
-            $GO_BIN build main.go
+            sudo ${{ env.BUILD_COMMAND }}
 
-            if [ $? -eq 0 ]; then
-              echo "✅ Build successful! Restarting service..."
-              sudo systemctl restart backend-template
-              sleep 3
+            # 2. Uygulamayı TEST portunda geçici olarak başlat
+            echo "🩺 Starting app on TEST_PORT (${{ env.TEST_PORT }}) for health check..."
+            sudo PORT=${{ env.TEST_PORT }} nohup ./main &> /dev/null &
+            APP_PID=$!
 
-              if sudo systemctl is-active --quiet backend-template; then
-                echo "🎉 Deployment successful! Service is running."
-                sudo systemctl status backend-template --no-pager -l
-              else
-                echo "❌ Service failed to start!"
-                sudo systemctl status backend-template --no-pager -l
+            # 3. Sağlık kontrolü yap
+            sleep 5
+            HEALTH_CHECK_URL="http://localhost:${{ env.TEST_PORT }}${{ env.HEALTH_CHECK_PATH }}"
+            if ! curl -s --fail --retry 5 --retry-delay 3 $HEALTH_CHECK_URL; then
+                echo "❌ Health check failed on TEST_PORT!"
+                sudo kill $APP_PID
+                sudo rm -rf $RELEASE_DIR
                 exit 1
-              fi
-            else
-              echo "❌ Build failed!"
-              exit 1
             fi
+
+            echo "✅ Health check successful. Switching to live..."
+            sudo kill $APP_PID
+
+            # 4. 'current' linkini değiştir ve ana servisi restart et
+            sudo ln -sfn $RELEASE_DIR $CURRENT_LINK
+            sudo systemctl restart ${{ env.SERVICE_NAME }}
+            echo "🎉 Deployment successful!"
+
+            # 5. Eski versiyonları temizle
+            echo "🧹 Cleaning up old releases..."
+            cd $RELEASES_DIR && ls -1tr | head -n -${{ env.KEEP_RELEASES }} | xargs -r sudo rm -rf
