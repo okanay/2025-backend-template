@@ -18,7 +18,7 @@ env:
   HEALTH_CHECK_PATH: "/"
 
   # --- PROJEYE ÖZEL KOMUTLAR ---
-  INSTALL_COMMAND: "go mod tidy"
+  INSTALL_COMMAND: "/usr/local/go/bin/go mod tidy"
   BUILD_COMMAND: "/usr/local/go/bin/go build -o main ."
 
 jobs:
@@ -38,7 +38,7 @@ jobs:
 
             # --- 1. DEPLOYMENT ORTAMINI HAZIRLA ---
             RELEASES_DIR="${{ env.PROJECT_ROOT }}/${{ env.VERSIONS_DIR_NAME }}"
-            STATE_DIR="${{ env.PROJECT_ROOT }}/${{ env.STATE_DIR_NAME }}" # build-state olarak güncellendi
+            STATE_DIR="${{ env.PROJECT_ROOT }}/${{ env.STATE_DIR_NAME }}"
             RELEASE_ID=$(date +%Y%m%d%H%M%S)
             NEW_RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 
