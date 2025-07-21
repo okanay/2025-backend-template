@@ -1,8 +1,8 @@
 name: Daily Analytics Report
 
 on:
-  schedule:
-    - cron: "0 9 * * *" # Her gün saat 09:00 (Türkiye saati 12:00)
+  # schedule:
+  #   - cron: "0 9 * * *" # Her gün saat 09:00 (Türkiye saati 12:00)
   workflow_dispatch: # Manuel test için
 
 jobs:

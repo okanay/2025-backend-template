@@ -1,16 +1,26 @@
 name: Deploy to Production with Zero Downtime
 
 on:
-  push:
-    branches: [main]
+  # Yorum satırını kaldırırsanız, main branch'e push olayı tetiklenir ve yeni kodları sunucuya dağıtır.
+  # push:
+  # branches: [main]
   workflow_dispatch:
 
 env:
+  # --- TEMEL AYARLAR ---
   PROJECT_ROOT: "/root/2025-backend-template"
   PORT_A: 4040
   PORT_B: 4041
-  KEEP_RELEASES: 3
-  HEALTH_CHECK_PATH: "/"
+  KEEP_RELEASES: 3 # Sunucuda tutulacak eski versiyon sayısı
+  HEALTH_CHECK_PATH: "/" # Sağlık kontrolü için endpoint
+
+  # --- PROJEYE ÖZEL KOMUTLAR ---
+  # Projenizin bağımlılıklarını kuran komut. Gerekmiyorsa boş bırakın.
+  # Örnek Node.js/React: "npm install"
+  # Örnek Go: "go mod tidy"
+  INSTALL_COMMAND: "go mod tidy"
+
+  # Projenizi build eden/derleyen komut.
   BUILD_COMMAND: "/usr/local/go/bin/go build -o main ."
 
 jobs:
@@ -26,8 +36,9 @@ jobs:
           passphrase: ${{ secrets.PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
-            set -e
+            set -e # Herhangi bir komut başarısız olursa script'i anında durdur
 
+            # --- 1. DEPLOYMENT ORTAMINI HAZIRLA ---
             RELEASES_DIR="${{ env.PROJECT_ROOT }}/releases"
             STATE_DIR="${{ env.PROJECT_ROOT }}/state"
             RELEASE_ID=$(date +%Y%m%d%H%M%S)
@@ -39,22 +50,34 @@ jobs:
             echo "🚀 Deployment Başlatılıyor: Release ID $RELEASE_ID"
             mkdir -p $RELEASES_DIR $STATE_DIR
 
+            # --- 2. YENİ VERSİYONU KUR ---
             echo "⬇️  Kod yeni release klasörüne klonlanıyor..."
             git clone https://github.com/${{ github.repository }}.git $NEW_RELEASE_DIR
             cd $NEW_RELEASE_DIR
 
-            echo "📋 Ana .env dosyası kopyalanıyor..."
+            echo "📋 Sunucudaki merkezi .env dosyası bu release'e kopyalanıyor..."
             if [ -f "${{ env.PROJECT_ROOT }}/.env" ]; then
               cp "${{ env.PROJECT_ROOT }}/.env" .
               echo "✅ .env dosyası başarıyla kopyalandı."
             else
-              echo "⚠️ UYARI: Ana dizinde .env dosyası bulunamadı."
+              echo "⚠️ UYARI: ${env.PROJECT_ROOT}/.env dosyası bulunamadı."
             fi
 
-            echo "🔨 Uygulama build ediliyor..."
+            # --- 3. BAĞIMLILIKLARI YÜKLE (YENİ ADIM) ---
+            if [ -n "${{ env.INSTALL_COMMAND }}" ]; then
+              echo "📦 Bağımlılıklar yükleniyor: ${{ env.INSTALL_COMMAND }}"
+              ${{ env.INSTALL_COMMAND }}
+              echo "✅ Bağımlılıklar yüklendi."
+            else
+              echo "ℹ️  Kurulum komutu (INSTALL_COMMAND) tanımlanmamış, bu adım atlanıyor."
+            fi
+
+            # --- 4. UYGULAMAYI BUILD ET ---
+            echo "🔨 Uygulama build ediliyor: ${{ env.BUILD_COMMAND }}"
             ${{ env.BUILD_COMMAND }}
             echo "✅ Build tamamlandı."
 
+            # --- Sonraki adımlar öncekiyle aynı... ---
             if [ -f "$LIVE_PORT_FILE" ]; then
               CURRENT_PORT=$(cat $LIVE_PORT_FILE)
             else
@@ -83,7 +106,6 @@ jobs:
             sudo nginx -s reload
             echo "✅ Nginx başarıyla $NEW_PORT portuna yönlendirildi."
 
-            # İYİLEŞTİRME: Nginx'in geçişi tamamlaması için kısa bir bekleme süresi
             echo "⏳ Eski süreci sonlandırmadan önce 1 saniye bekleniyor..."
             sleep 1
 
