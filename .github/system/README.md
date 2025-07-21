@@ -1,19 +1,3 @@
-# Ubuntu Backend Template Deployment Rehberi
-
-Bu rehber, GoLang backend template'ini Ubuntu sunucusuna deploy etmek için gereken tüm adımları detaylarıyla açıklar.
-
-## 📁 Klasör Yapısı
-```
-system/
-├── README.md (bu dosya)
-├── nginx/
-│   └── backend-template.conf
-├── systemd/
-│   └── backend-template.service
-└── ssl/
-    └── certbot-setup.md
-```
-
 ## 🔧 1. Nginx Konfigürasyonu
 
 ### Dosya: `/etc/nginx/sites-available/backend-template`
