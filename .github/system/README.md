@@ -60,14 +60,6 @@ server {
 ### Gelişmiş Template (Çoklu Endpoint + Özellikler)
 
 ```nginx
-# Load balancing için upstream tanımı
-upstream backend_servers {
-    least_conn;  # En az bağlantı olan sunucuya yönlendir
-    server localhost:4040 weight=3;  # Ana sunucu (daha fazla ağırlık)
-    server localhost:4041 weight=2;  # İkinci sunucu
-    server localhost:4042 backup;    # Yedek sunucu (diğerleri çökerse)
-}
-
 server {
     listen 80;
     server_name template.hoi.com.tr;
@@ -77,8 +69,7 @@ server {
 
     # API endpoint'leri (daha katı ayarlar)
     location /api/ {
-        # Load balancer kullan
-        proxy_pass http://backend_servers;
+        proxy_pass http://localhost:4040;
         proxy_http_version 1.1;
 
         # Temel header'lar
@@ -109,7 +100,7 @@ server {
         allow 95.70.162.47;       # Belirli IP (ofis IP'si)
         deny all;                 # Diğer tüm IP'leri reddet
 
-        proxy_pass http://backend_servers;
+        proxy_pass http://localhost:4040;
         proxy_http_version 1.1;
 
         # Temel header'lar
@@ -128,7 +119,7 @@ server {
     location /upload/ {
         client_max_body_size 100m;  # 100MB'a kadar dosya
 
-        proxy_pass http://backend_servers;
+        proxy_pass http://localhost:4040;
         proxy_http_version 1.1;
 
         # Temel header'lar
@@ -144,7 +135,7 @@ server {
 
     # WebSocket endpoint'i
     location /ws {
-        proxy_pass http://backend_servers;
+        proxy_pass http://localhost:4040;
         proxy_http_version 1.1;
 
         # WebSocket için gerekli header'lar
@@ -162,7 +153,7 @@ server {
 
     # Static dosyalar (cache ile)
     location /static/ {
-        proxy_pass http://backend_servers;
+        proxy_pass http://localhost:4040;
 
         # Cache ayarları
         expires 30d;                              # 30 gün cache
@@ -179,7 +170,7 @@ server {
 
     # Ana sayfa ve diğer tüm istekler
     location / {
-        proxy_pass http://backend_servers;
+        proxy_pass http://localhost:4040;
         proxy_http_version 1.1;
 
         # WebSocket desteği (gerekirse)
@@ -271,75 +262,6 @@ StandardError=journal
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=30
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Çoklu Instance Servis (Load Balancing için)
-
-**Port 4040 için servis:**
-```ini
-[Unit]
-Description=Backend Template Go Service - Port 4040
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=backend
-WorkingDirectory=/opt/backend-template
-ExecStart=/opt/backend-template/main
-Restart=always
-RestartSec=10
-
-# Environment ayarları
-Environment=PORT=4040
-Environment=INSTANCE_ID=1
-EnvironmentFile=/opt/backend-template/.env
-
-# Resource limitleri
-LimitNOFILE=65536
-LimitNPROC=4096
-
-# Güvenlik
-NoNewPrivileges=true
-PrivateTmp=true
-
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**Port 4041 için servis:**
-```ini
-[Unit]
-Description=Backend Template Go Service - Port 4041
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=backend
-WorkingDirectory=/opt/backend-template
-ExecStart=/opt/backend-template/main
-Restart=always
-RestartSec=10
-
-Environment=PORT=4041
-Environment=INSTANCE_ID=2
-EnvironmentFile=/opt/backend-template/.env
-
-LimitNOFILE=65536
-LimitNPROC=4096
-
-NoNewPrivileges=true
-PrivateTmp=true
-
-StandardOutput=journal
-StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -462,29 +384,7 @@ sudo systemctl status backend-template
 sudo systemctl status nginx
 ```
 
-### Çoklu Instance Deployment (Load Balancing)
-```bash
-# Her instance için ayrı servis dosyası oluştur
-sudo nano /etc/systemd/system/backend-template-4040.service
-sudo nano /etc/systemd/system/backend-template-4041.service
-sudo nano /etc/systemd/system/backend-template-4042.service
 
-# Tüm servisleri yükle
-sudo systemctl daemon-reload
-
-# Servisleri başlat
-sudo systemctl start backend-template-4040
-sudo systemctl start backend-template-4041
-sudo systemctl start backend-template-4042
-
-# Otomatik başlatmayı etkinleştir
-sudo systemctl enable backend-template-4040
-sudo systemctl enable backend-template-4041
-sudo systemctl enable backend-template-4042
-
-# Durumları kontrol et
-sudo systemctl status backend-template-*
-```
 
 ---
 
@@ -529,16 +429,14 @@ ps aux | grep main
 
 ### Load Balancing Sorunları
 ```bash
-# Hangi instance'lar çalışıyor
-sudo systemctl status backend-template-*
+# Backend service durumu
+sudo systemctl status backend-template
 
-# Port kontrolleri
-sudo netstat -tlnp | grep -E ":(4040|4041|4042)"
+# Port kullanımda mı?
+sudo netstat -tlnp | grep :4040
 
-# Upstream durumu test (manuel)
-curl -I http://localhost:4040/health
-curl -I http://localhost:4041/health
-curl -I http://localhost:4042/health
+# Process kontrol
+ps aux | grep main
 ```
 
 ### SSL Sorunları
