@@ -53,40 +53,43 @@ sudo mkdir -p /etc/nginx/includes
 Dosya: `/etc/nginx/sites-available/backend-template`
 
 ```nginx
-# Yönlendirilecek backend uygulamasını tanımlayan upstream bloku.
 upstream backend_app {
-    # Port bilgisi, deploy script'i tarafından güncellenecek bu dosyadan okunacak.
+    # Port bilgisini OTOMATİK TARANMAYAN bu özel dosyadan oku.
     include /etc/nginx/includes/backend_upstream.conf;
 }
 
 server {
     listen 80;
-    # SSL aktif edildiğinde bu satır otomatik olarak 443'e güncellenir.
-
-    server_name senin-alan-adin.com.tr; # Kendi alan adınızı yazın
+    server_name template.hoi.com.tr; # Bu alan adını kontrol edin.
 
     location / {
         proxy_pass http://backend_app;
         proxy_http_version 1.1;
+
+        # WebSocket desteği
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
+        proxy_cache_bypass $http_upgrade;
+
+        # Temel header'lar
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
 
-        # Cloudflare kullanıyorsanız bu header'ı ekleyin
+        # Cloudflare header'ları (CDN kullanıyorsanız)
         proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+        proxy_set_header CF-Ray $http_cf_ray;
+        proxy_set_header CF-IPCountry $http_cf_ipcountry;
 
-        # Timeout ayarları
+        # GoLang için timeout ayarları
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
 
-    access_log /var/log/nginx/senin-alan-adin-access.log;
-    error_log /var/log/nginx/senin-alan-adin-error.log;
+    access_log /var/log/nginx/template-hoi-access.log;
+    error_log /var/log/nginx/template-hoi-error.log;
 }
 ```
 
