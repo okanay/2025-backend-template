@@ -1,17 +1,15 @@
-name: Deploy to Production
+name: Deploy to Production with Zero Downtime
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 env:
-  # Sunucudaki ana proje klasörünüz
   PROJECT_DIR: "/root/2025-backend-template"
-  # Systemd servisinizin tam adı
-  SERVICE_NAME: "backend-template.service"
-  # Yeni kodun test edileceği geçici port
-  TEST_PORT: 4041
+  # Uygulamanın çalışabileceği portlar
+  PORT_A: 4040
+  PORT_B: 4041
   # Sunucuda kaç eski versiyonun tutulacağı
   KEEP_RELEASES: 5
   # Uygulamanızın sağlık kontrolü için endpoint'i
@@ -23,8 +21,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
       - name: Deploy to Server
-        uses: appleboy/ssh-action@v0.1.5
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
@@ -32,44 +33,88 @@ jobs:
           passphrase: ${{ secrets.PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
-            set -e
+            set -e # Herhangi bir komut başarısız olursa script'i durdur
 
+            # --- DEPLOYMENT DEĞİŞKENLERİNİ AYARLA ---
             RELEASES_DIR="${{ env.PROJECT_DIR }}/releases"
-            CURRENT_LINK="${{ env.PROJECT_DIR }}/current"
+            STATE_DIR="${{ env.PROJECT_DIR }}/state" # Canlı port ve PID gibi durum bilgileri için
             RELEASE_ID=$(date +%Y%m%d%H%M%S)
             RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
+            LIVE_PORT_FILE="$STATE_DIR/live.port"
+            PID_FILE_PATH="$STATE_DIR/app.pid"
 
-            echo "🚀 Starting deployment of release: $RELEASE_ID"
+            echo "🚀 Deployment Başlatılıyor: Release ID $RELEASE_ID"
 
-            # 1. Kodu klonla ve build et
-            sudo mkdir -p $RELEASE_DIR && cd $RELEASE_DIR
-            sudo git clone https://github.com/${{ github.repository }}.git .
-            echo "🔨 Building application..."
-            sudo ${{ env.BUILD_COMMAND }}
+            # Gerekli klasörleri oluştur
+            mkdir -p $RELEASES_DIR
+            mkdir -p $STATE_DIR
 
-            # 2. Uygulamayı TEST portunda geçici olarak başlat
-            echo "🩺 Starting app on TEST_PORT (${{ env.TEST_PORT }}) for health check..."
-            sudo PORT=${{ env.TEST_PORT }} nohup ./main &> /dev/null &
-            APP_PID=$!
+            # --- 1. YENİ VERSİYONU HAZIRLA VE BUILD ET ---
+            echo "⬇️  Kod Klonlanıyor ve Build Ediliyor..."
+            git clone https://github.com/${{ github.repository }}.git $RELEASE_DIR
+            cd $RELEASE_DIR
+            # .env dosyasını bir önceki versiyondan kopyala (varsa)
+            if [ -f "${{ env.PROJECT_DIR }}/.env" ]; then
+              cp "${{ env.PROJECT_DIR }}/.env" .
+            fi
+            ${{ env.BUILD_COMMAND }}
+            echo "✅ Build tamamlandı."
 
-            # 3. Sağlık kontrolü yap
-            sleep 5
-            HEALTH_CHECK_URL="http://localhost:${{ env.TEST_PORT }}${{ env.HEALTH_CHECK_PATH }}"
+            # --- 2. YENİ PORTU BELİRLE ---
+            # Mevcut canlı portu oku, dosya yoksa varsayılan olarak PORT_A'yı kullan
+            CURRENT_PORT=$(cat $LIVE_PORT_FILE || echo "${{ env.PORT_A }}")
+
+            if [ "$CURRENT_PORT" = "${{ env.PORT_A }}" ]; then
+              NEW_PORT=${{ env.PORT_B }}
+            else
+              NEW_PORT=${{ env.PORT_A }}
+            fi
+            echo "🔄 Port Değişimi: Mevcut Port: $CURRENT_PORT -> Yeni Port: $NEW_PORT"
+
+            # --- 3. YENİ UYGULAMAYI BAŞLAT VE TEST ET ---
+            echo "🩺 Yeni versiyon $NEW_PORT portunda sağlık kontrolü için başlatılıyor..."
+            # Komut: PORT'u ver, .env'deki diğer değişkenleri yükle ve uygulamayı arkaplanda başlat
+            (cd $RELEASE_DIR && PORT=$NEW_PORT nohup ./main &> app.log & echo $! > $PID_FILE_PATH)
+
+            # Uygulamanın başlaması için bekle
+            sleep 10
+
+            HEALTH_CHECK_URL="http://localhost:$NEW_PORT${{ env.HEALTH_CHECK_PATH }}"
+            echo "🔎 Sağlık kontrolü yapılıyor: $HEALTH_CHECK_URL"
+
             if ! curl -s --fail --retry 5 --retry-delay 3 $HEALTH_CHECK_URL; then
-                echo "❌ Health check failed on TEST_PORT!"
-                sudo kill $APP_PID
-                sudo rm -rf $RELEASE_DIR
-                exit 1
+              echo "❌ Sağlık kontrolü BAŞARISIZ! Deployment geri alınıyor."
+              NEW_PID=$(cat $PID_FILE_PATH)
+              kill $NEW_PID
+              rm -rf $RELEASE_DIR
+              exit 1
+            fi
+            echo "✅ Sağlık kontrolü BAŞARILI."
+
+            # --- 4. NGINX'İ YENİ PORTA YÖNLENDİR (SOFT SWITCH) ---
+            echo "🔄 Nginx yeni porta yönlendiriliyor..."
+            echo "server 127.0.0.1:$NEW_PORT;" | sudo tee /etc/nginx/conf.d/backend_upstream.conf
+            sudo nginx -s reload # Bağlantıları kesmeden yeniden yükle
+            echo "✅ Nginx başarıyla $NEW_PORT portuna yönlendirildi."
+
+            # --- 5. ESKİ UYGULAMAYI DURDUR ---
+            # Eski PID'yi bul ve işlemi sonlandır
+            OLD_PID=$(ps aux | grep "[p]ort $CURRENT_PORT" | grep main | awk '{print $2}')
+            if [ -n "$OLD_PID" ]; then
+              echo "🛑 Eski versiyon (PID: $OLD_PID, Port: $CURRENT_PORT) durduruluyor..."
+              kill $OLD_PID
+            else
+              echo "ℹ️  Eski versiyon zaten çalışmıyor."
             fi
 
-            echo "✅ Health check successful. Switching to live..."
-            sudo kill $APP_PID
+            # --- 6. DURUMU GÜNCELLE VE TEMİZLİK YAP ---
+            # Canlı port bilgisini güncelle
+            echo $NEW_PORT > $LIVE_PORT_FILE
 
-            # 4. 'current' linkini değiştir ve ana servisi restart et
-            sudo ln -sfn $RELEASE_DIR $CURRENT_LINK
-            sudo systemctl restart ${{ env.SERVICE_NAME }}
-            echo "🎉 Deployment successful!"
+            # Yeni PID dosyasını kalıcı hale getir
+            mv $RELEASE_DIR/$PID_FILE_PATH $STATE_DIR/
 
-            # 5. Eski versiyonları temizle
-            echo "🧹 Cleaning up old releases..."
-            cd $RELEASES_DIR && ls -1tr | head -n -${{ env.KEEP_RELEASES }} | xargs -r sudo rm -rf
+            echo "🧹 Eski versiyonlar temizleniyor..."
+            cd $RELEASES_DIR && ls -1tr | head -n -${{ env.KEEP_RELEASES }} | xargs -r rm -rf
+
+            echo "🎉 Deployment başarıyla tamamlandı! Canlı port: $NEW_PORT"

@@ -14,13 +14,15 @@ bin
 /database/backups
 /database/backup
 
-"**/node_modules",
-"**/.next",
-"**/.nitro",
-"**/.output",
-"**/.wrangler",
-"**/workers",
+node_modules/
+.next/
+.nitro/
+.output/
+.wrangler/
+workers/
 
+releases
+current
 
 *.dll
 *.so
