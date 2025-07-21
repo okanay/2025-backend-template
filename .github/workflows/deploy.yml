@@ -1,26 +1,24 @@
 name: Deploy to Production with Zero Downtime
 
 on:
-  # Yorum satırını kaldırırsanız, main branch'e push olayı tetiklenir ve yeni kodları sunucuya dağıtır.
-  # push:
+  #push:
   # branches: [main]
   workflow_dispatch:
 
 env:
-  # --- TEMEL AYARLAR ---
+  # --- TEMEL YOL VE İSİM AYARLARI ---
   PROJECT_ROOT: "/root/2025-backend-template"
+  VERSIONS_DIR_NAME: "build-versions"
+  STATE_DIR_NAME: "build-state"
+
+  # --- SİSTEM AYARLARI ---
   PORT_A: 4040
   PORT_B: 4041
-  KEEP_RELEASES: 3 # Sunucuda tutulacak eski versiyon sayısı
-  HEALTH_CHECK_PATH: "/" # Sağlık kontrolü için endpoint
+  KEEP_VERSIONS: 3
+  HEALTH_CHECK_PATH: "/"
 
   # --- PROJEYE ÖZEL KOMUTLAR ---
-  # Projenizin bağımlılıklarını kuran komut. Gerekmiyorsa boş bırakın.
-  # Örnek Node.js/React: "npm install"
-  # Örnek Go: "go mod tidy"
   INSTALL_COMMAND: "go mod tidy"
-
-  # Projenizi build eden/derleyen komut.
   BUILD_COMMAND: "/usr/local/go/bin/go build -o main ."
 
 jobs:
@@ -36,13 +34,14 @@ jobs:
           passphrase: ${{ secrets.PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
-            set -e # Herhangi bir komut başarısız olursa script'i anında durdur
+            set -e
 
             # --- 1. DEPLOYMENT ORTAMINI HAZIRLA ---
-            RELEASES_DIR="${{ env.PROJECT_ROOT }}/releases"
-            STATE_DIR="${{ env.PROJECT_ROOT }}/state"
+            RELEASES_DIR="${{ env.PROJECT_ROOT }}/${{ env.VERSIONS_DIR_NAME }}"
+            STATE_DIR="${{ env.PROJECT_ROOT }}/${{ env.STATE_DIR_NAME }}" # build-state olarak güncellendi
             RELEASE_ID=$(date +%Y%m%d%H%M%S)
             NEW_RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
+
             LIVE_PORT_FILE="$STATE_DIR/live.port"
             LIVE_PID_FILE="$STATE_DIR/app.pid"
             UPSTREAM_CONF_FILE="/etc/nginx/includes/backend_upstream.conf"
@@ -50,77 +49,54 @@ jobs:
             echo "🚀 Deployment Başlatılıyor: Release ID $RELEASE_ID"
             mkdir -p $RELEASES_DIR $STATE_DIR
 
-            # --- 2. YENİ VERSİYONU KUR ---
-            echo "⬇️  Kod yeni release klasörüne klonlanıyor..."
+            # --- Script'in geri kalanı birebir aynı ---
+
+            echo "⬇️  Kod yeni versiyon klasörüne klonlanıyor..."
             git clone https://github.com/${{ github.repository }}.git $NEW_RELEASE_DIR
             cd $NEW_RELEASE_DIR
 
-            echo "📋 Sunucudaki merkezi .env dosyası bu release'e kopyalanıyor..."
+            echo "📋 Sunucudaki merkezi .env dosyası bu versiyona kopyalanıyor..."
             if [ -f "${{ env.PROJECT_ROOT }}/.env" ]; then
               cp "${{ env.PROJECT_ROOT }}/.env" .
-              echo "✅ .env dosyası başarıyla kopyalandı."
             else
               echo "⚠️ UYARI: ${env.PROJECT_ROOT}/.env dosyası bulunamadı."
             fi
 
-            # --- 3. BAĞIMLILIKLARI YÜKLE (YENİ ADIM) ---
             if [ -n "${{ env.INSTALL_COMMAND }}" ]; then
               echo "📦 Bağımlılıklar yükleniyor: ${{ env.INSTALL_COMMAND }}"
               ${{ env.INSTALL_COMMAND }}
-              echo "✅ Bağımlılıklar yüklendi."
             else
-              echo "ℹ️  Kurulum komutu (INSTALL_COMMAND) tanımlanmamış, bu adım atlanıyor."
+              echo "ℹ️ Kurulum komutu atlanıyor."
             fi
 
-            # --- 4. UYGULAMAYI BUILD ET ---
             echo "🔨 Uygulama build ediliyor: ${{ env.BUILD_COMMAND }}"
             ${{ env.BUILD_COMMAND }}
-            echo "✅ Build tamamlandı."
 
-            # --- Sonraki adımlar öncekiyle aynı... ---
-            if [ -f "$LIVE_PORT_FILE" ]; then
-              CURRENT_PORT=$(cat $LIVE_PORT_FILE)
-            else
-              CURRENT_PORT=""
-            fi
+            if [ -f "$LIVE_PORT_FILE" ]; then CURRENT_PORT=$(cat $LIVE_PORT_FILE); else CURRENT_PORT=""; fi
             NEW_PORT=$([ "$CURRENT_PORT" = "${{ env.PORT_A }}" ] && echo "${{ env.PORT_B }}" || echo "${{ env.PORT_A }}")
             echo "🔄 Port Değişimi: Mevcut: '$CURRENT_PORT' -> Yeni Hedef: '$NEW_PORT'"
-
-            echo "🩺 Yeni versiyon $NEW_PORT portunda başlatılıyor..."
             (PORT=$NEW_PORT nohup ./main &> app.log & echo $! > ./app.pid.temp)
             sleep 8
             HEALTH_CHECK_URL="http://localhost:$NEW_PORT${{ env.HEALTH_CHECK_PATH }}"
-            echo "🔎 Sağlık kontrolü yapılıyor: $HEALTH_CHECK_URL"
-
             if ! curl -s --fail --retry 3 --retry-delay 5 $HEALTH_CHECK_URL; then
-              echo "❌ Sağlık kontrolü BAŞARISIZ! Deployment geri alınıyor."
-              echo "--- UYGULAMA LOGLARI (app.log) ---"; cat app.log; echo "---"
+              echo "❌ Sağlık kontrolü BAŞARISIZ!"; cat app.log
               NEW_PID=$(cat ./app.pid.temp); if [ -n "$NEW_PID" ]; then kill $NEW_PID || true; fi
-              rm -rf $NEW_RELEASE_DIR
-              exit 1
+              rm -rf $NEW_RELEASE_DIR; exit 1
             fi
             echo "✅ Sağlık kontrolü BAŞARILI."
-
             echo "🔄 Nginx yeni porta yönlendiriliyor..."
             echo "server 127.0.0.1:$NEW_PORT;" | sudo tee $UPSTREAM_CONF_FILE
             sudo nginx -s reload
-            echo "✅ Nginx başarıyla $NEW_PORT portuna yönlendirildi."
-
-            echo "⏳ Eski süreci sonlandırmadan önce 1 saniye bekleniyor..."
+            echo "⏳ Geçiş için 1 saniye bekleniyor..."
             sleep 1
-
             if [ -f "$LIVE_PID_FILE" ]; then
               OLD_PID=$(cat $LIVE_PID_FILE)
-              echo "🛑 Eski versiyon (PID: $OLD_PID, Port: $CURRENT_PORT) durduruluyor..."
-              if ps -p $OLD_PID > /dev/null; then kill $OLD_PID; echo "✅ Eski süreç durduruldu."; else echo "ℹ️ Eski PID ($OLD_PID) zaten çalışmıyor."; fi
-            else
-              echo "ℹ️ Durdurulacak eski bir süreç (PID dosyası) bulunamadı."
+              if ps -p $OLD_PID > /dev/null; then kill $OLD_PID; fi
             fi
-
             echo $NEW_PORT > $LIVE_PORT_FILE
             mv ./app.pid.temp $LIVE_PID_FILE
 
             echo "🧹 Eski versiyonlar temizleniyor..."
-            cd $RELEASES_DIR && ls -1tr | head -n -${{ env.KEEP_RELEASES }} | xargs -r rm -rf
+            cd $RELEASES_DIR && ls -1tr | head -n -${{ env.KEEP_VERSIONS }} | xargs -r rm -rf
 
             echo "🎉 Deployment başarıyla tamamlandı! Aktif Port: $NEW_PORT"

@@ -1,264 +1,89 @@
-# 🚀 Ubuntu VPS - Nginx ve Systemd ile Backend Deployment Rehberi
+# 🚀 Ubuntu VPS - Nginx + Systemd Backend Deployment
 
-Bu rehber, GoLang backend uygulamalarını Ubuntu VPS'e deploy etmek için gereken tüm konfigürasyonları ve komutları detaylarıyla açıklar.
+GoLang backend uygulamalarını Ubuntu VPS'e deploy etmek için **sadece 2 katman**: Nginx (reverse proxy) + Systemd (servis yöneticisi).
 
-## 📋 İçindekiler
-1. [Nginx Konfigürasyonu](#nginx-konfigürasyonu)
-2. [Systemd Servis Ayarları](#systemd-servis-ayarları)
-3. [SSL Sertifikası](#ssl-sertifikası)
-4. [Log İzleme](#log-izleme)
-5. [Deployment Sırası](#deployment-sırası)
-6. [Sorun Giderme](#sorun-giderme)
+## 📋 Temel Formül
+
+1. **Nginx**: Domain'den backend'e yönlendirme (port 80/443 → 4040)
+2. **Systemd**: Backend uygulamasını servis olarak çalıştırma
 
 ---
 
 ## 🔧 1. Nginx Konfigürasyonu
 
-### Basit Template (Tek Backend)
-**Dosya:** `/etc/nginx/sites-available/backend-template`
+> ⚠️ **Çoklu proje**: Aynı sunucuda birden fazla proje varsa her proje için farklı port (4040, 5050, 6060...) kullanın.
+
+**Dosya:** `/etc/nginx/sites-available/PROJE_ADI`
 
 ```nginx
 server {
     listen 80;
-    server_name template.hoi.com.tr;
-
-    # Global ayarlar
-    client_max_body_size 50m;  # Dosya yükleme limiti
+    server_name DOMAIN_ADINIZ.com;  # 🔧 Değiştirin
 
     location / {
-        proxy_pass http://localhost:4040;
+        proxy_pass http://localhost:4040;  # 🔧 Port değiştirin
         proxy_http_version 1.1;
+
+        # Temel header'lar
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
 
         # WebSocket desteği
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_cache_bypass $http_upgrade;
 
-        # Temel header'lar
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Cloudflare header'ları (CDN kullanıyorsanız)
-        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
-        proxy_set_header CF-Ray $http_cf_ray;
-        proxy_set_header CF-IPCountry $http_cf_ipcountry;
-
-        # GoLang için timeout ayarları
+        # Timeout ayarları
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
 
     # Log dosyaları
-    access_log /var/log/nginx/template-hoi-access.log;
-    error_log /var/log/nginx/template-hoi-error.log;
+    access_log /var/log/nginx/PROJE_ADI-access.log;  # 🔧 Değiştirin
+    error_log /var/log/nginx/PROJE_ADI-error.log;    # 🔧 Değiştirin
 }
 ```
 
-### Gelişmiş Template (Çoklu Endpoint + Özellikler)
+### Nginx Aktivasyonu
+```bash
+# Konfigürasyon aktifleştir
+sudo ln -s /etc/nginx/sites-available/PROJE_ADI /etc/nginx/sites-enabled/
 
-```nginx
-server {
-    listen 80;
-    server_name template.hoi.com.tr;
+# Test et
+sudo nginx -t
 
-    # Global ayarlar
-    client_max_body_size 50m;
-
-    # API endpoint'leri (daha katı ayarlar)
-    location /api/ {
-        proxy_pass http://localhost:4040;
-        proxy_http_version 1.1;
-
-        # Temel header'lar
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # API için özel header'lar
-        proxy_set_header Content-Type application/json;
-        proxy_set_header X-API-Version "v1";
-
-        # Cloudflare
-        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
-        proxy_set_header CF-IPCountry $http_cf_ipcountry;
-
-        # API için kısa timeout (hızlı response beklentisi)
-        proxy_connect_timeout 10s;
-        proxy_send_timeout 30s;
-        proxy_read_timeout 30s;
-    }
-
-    # Admin paneli (IP bazlı erişim kontrolü)
-    location /admin/ {
-        # Sadece bu IP'lerden erişim izni
-        allow 192.168.1.0/24;     # Yerel ağ
-        allow 78.186.0.0/16;      # Türkiye IP aralığı örneği
-        allow 95.70.162.47;       # Belirli IP (ofis IP'si)
-        deny all;                 # Diğer tüm IP'leri reddet
-
-        proxy_pass http://localhost:4040;
-        proxy_http_version 1.1;
-
-        # Temel header'lar
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Admin için uzun timeout
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 120s;
-        proxy_read_timeout 120s;
-    }
-
-    # Dosya yükleme endpoint'i (büyük dosyalar)
-    location /upload/ {
-        client_max_body_size 100m;  # 100MB'a kadar dosya
-
-        proxy_pass http://localhost:4040;
-        proxy_http_version 1.1;
-
-        # Temel header'lar
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
-        # Upload için uzun timeout
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 300s;   # 5 dakika
-        proxy_read_timeout 300s;   # 5 dakika
-    }
-
-    # WebSocket endpoint'i
-    location /ws {
-        proxy_pass http://localhost:4040;
-        proxy_http_version 1.1;
-
-        # WebSocket için gerekli header'lar
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-
-        # WebSocket için çok uzun timeout (24 saat)
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-
-        proxy_cache_bypass $http_upgrade;
-    }
-
-    # Static dosyalar (cache ile)
-    location /static/ {
-        proxy_pass http://localhost:4040;
-
-        # Cache ayarları
-        expires 30d;                              # 30 gün cache
-        add_header Cache-Control "public, immutable";
-        add_header X-Cache-Status "HIT";
-
-        # Static dosyalar için basit header'lar
-        proxy_set_header Host $host;
-
-        # Kısa timeout (static dosyalar hızlı olmalı)
-        proxy_connect_timeout 10s;
-        proxy_read_timeout 30s;
-    }
-
-    # Ana sayfa ve diğer tüm istekler
-    location / {
-        proxy_pass http://localhost:4040;
-        proxy_http_version 1.1;
-
-        # WebSocket desteği (gerekirse)
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_cache_bypass $http_upgrade;
-
-        # Temel header'lar
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Cloudflare header'ları
-        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
-        proxy_set_header CF-Ray $http_cf_ray;
-        proxy_set_header CF-IPCountry $http_cf_ipcountry;
-
-        # Standart timeout
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # Hata sayfaları
-    error_page 502 503 504 /50x.html;
-    location = /50x.html {
-        root /var/www/html;
-    }
-
-    # Log dosyaları
-    access_log /var/log/nginx/template-hoi-access.log;
-    error_log /var/log/nginx/template-hoi-error.log;
-}
+# Restart
+sudo systemctl restart nginx
 ```
-
-### Rate Limiting (Dikkatli Kullanım)
-**⚠️ Uyarı:** Rate limiting Nginx katmanında karmaşık olabilir. Basit senaryolar için:
-
-```nginx
-# nginx.conf içine ekle (http bloku içinde)
-http {
-    # IP başına saniyede 10 istek (10MB memory pool)
-    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-}
-
-# site konfigürasyonunda kullan
-location /api/ {
-    # Burst: 20 isteğe kadar ani artışa izin ver
-    # nodelay: Hemen işle, kuyruğa koyma
-    limit_req zone=api burst=20 nodelay;
-
-    # ... diğer proxy ayarları
-}
-```
-
-**Rate limiting alternatifleri:**
-- Backend uygulamada middleware ile yönet (önerilen)
-- Cloudflare Rate Limiting kullan (daha kolay)
-- Redis ile custom rate limiting
 
 ---
 
-## ⚙️ 2. Systemd Servis Ayarları
+## ⚙️ 2. Systemd Servis
 
-### Basit Servis Template
-**Dosya:** `/etc/systemd/system/backend-template.service`
+**Dosya:** `/etc/systemd/system/PROJE_ADI.service`
 
 ```ini
 [Unit]
-Description=Backend Template Go Service
-After=network.target postgresql.service
-Wants=postgresql.service
+Description=PROJE_ADI Backend Service  # 🔧 Değiştirin
+After=network.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/2025-backend-template
-ExecStart=/root/2025-backend-template/main
+WorkingDirectory=/root/PROJE_ADI        # 🔧 Değiştirin
+ExecStart=/root/PROJE_ADI/main          # 🔧 Değiştirin
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/root/2025-backend-template/.env
+EnvironmentFile=/root/PROJE_ADI/.env    # 🔧 Değiştirin
 
 # Log yönetimi
 StandardOutput=journal
 StandardError=journal
 
-# GoLang graceful shutdown için
+# Graceful shutdown
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=30
@@ -267,248 +92,150 @@ TimeoutStopSec=30
 WantedBy=multi-user.target
 ```
 
+### Servis Aktivasyonu
+```bash
+# Servis yükle
+sudo systemctl daemon-reload
+
+# Başlat ve aktifleştir
+sudo systemctl start PROJE_ADI
+sudo systemctl enable PROJE_ADI
+
+# Durum kontrol
+sudo systemctl status PROJE_ADI
+```
+
 ---
 
-## 🔒 3. SSL Sertifikası (Let's Encrypt)
+## 🔒 3. SSL (Let's Encrypt)
 
 ```bash
-# 1. Sistem güncelle
-sudo apt update
-
-# 2. Certbot kur
+# Certbot kur
 sudo apt install certbot python3-certbot-nginx -y
 
-# 3. SSL sertifikası al (otomatik nginx konfigürasyonu)
-sudo certbot --nginx -d template.hoi.com.tr
+# SSL al (otomatik nginx güncellemesi)
+sudo certbot --nginx -d DOMAIN_ADINIZ.com  # 🔧 Değiştirin
 
-# 4. Otomatik yenileme test et
+# Otomatik yenileme test
 sudo certbot renew --dry-run
 ```
 
-**SSL sonrası Nginx otomatik eklemeleri:**
-```nginx
-listen 443 ssl;
-ssl_certificate /etc/letsencrypt/live/template.hoi.com.tr/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/template.hoi.com.tr/privkey.pem;
+---
+
+## 📊 4. Log İzleme
+
+```bash
+# Nginx logları
+sudo tail -f /var/log/nginx/PROJE_ADI-access.log
+sudo tail -f /var/log/nginx/PROJE_ADI-error.log
+
+# Servis logları
+sudo journalctl -u PROJE_ADI -f
+
+# Son 100 satır
+sudo journalctl -u PROJE_ADI -n 100
 ```
 
 ---
 
-## 📊 4. Log İzleme ve Debugging
-
-### Nginx Log Komutları
-```bash
-# Canlı erişim logları
-sudo tail -f /var/log/nginx/template-hoi-access.log
-
-# Hata logları
-sudo tail -f /var/log/nginx/template-hoi-error.log
-
-# Son 100 satır
-sudo tail -n 100 /var/log/nginx/template-hoi-access.log
-
-# Belirli IP'nin istekleri
-grep "95.70.162.47" /var/log/nginx/template-hoi-access.log
-
-# 404 hataları
-grep " 404 " /var/log/nginx/template-hoi-access.log
-
-# En çok istek yapan IP'ler (top 10)
-awk '{print $1}' /var/log/nginx/template-hoi-access.log | sort | uniq -c | sort -nr | head -10
-```
-
-### Systemd Service Log Komutları
-```bash
-# Canlı servis logları
-sudo journalctl -u backend-template -f
-
-# Son 100 satır
-sudo journalctl -u backend-template -n 100
-
-# Sadece bugünün logları
-sudo journalctl -u backend-template --since today
-
-# Belirli zaman aralığı
-sudo journalctl -u backend-template --since "2025-01-15 10:00" --until "2025-01-15 11:00"
-
-# Hata içeren loglar
-sudo journalctl -u backend-template --grep="error"
-
-# Tüm servisler için özet durum
-sudo systemctl status
-```
-
----
-
-## 🚀 5. Deployment Sırası
-
-### Kurulum Adımları
+## 🚀 5. Deployment Adımları
 
 ```bash
-# 1. NGINX KURULUMU
-sudo apt update
-sudo apt install nginx -y
+# 1. Nginx kur
+sudo apt update && sudo apt install nginx -y
 
-# 2. NGINX KONFİGÜRASYON OLUŞTUR
-sudo nano /etc/nginx/sites-available/backend-template
+# 2. Nginx konfigürasyon oluştur
+sudo nano /etc/nginx/sites-available/PROJE_ADI
 
-# 3. KONFİGÜRASYONU AKTİFLEŞTİR
-sudo ln -s /etc/nginx/sites-available/backend-template /etc/nginx/sites-enabled/
+# 3. Aktifleştir
+sudo ln -s /etc/nginx/sites-available/PROJE_ADI /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl restart nginx
 
-# 4. NGINX KONFİGÜRASYONUNU TEST ET
-sudo nginx -t
+# 4. Backend binary ve .env hazırla
+# /root/PROJE_ADI/ klasörüne yerleştir
 
-# 5. NGINX'İ BAŞLAT
-sudo systemctl restart nginx
-sudo systemctl enable nginx
+# 5. Systemd servis oluştur
+sudo nano /etc/systemd/system/PROJE_ADI.service
 
-# 6. BACKEND UYGULAMASI HAZIRLA
-# (Binary dosyasını sunucuya yükle)
-# .env dosyasını hazırla
-
-# 7. SYSTEMd SERVİS OLUŞTUR
-sudo nano /etc/systemd/system/backend-template.service
-
-# 8. SERVİS AYARLARINI YÜKLE
+# 6. Servisi başlat
 sudo systemctl daemon-reload
+sudo systemctl start PROJE_ADI
+sudo systemctl enable PROJE_ADI
 
-# 9. SERVİSİ BAŞLAT
-sudo systemctl start backend-template
-sudo systemctl enable backend-template
+# 7. SSL kur
+sudo certbot --nginx -d DOMAIN_ADINIZ.com
 
-# 10. SSL SERTİFİKASI KUR
-sudo certbot --nginx -d template.hoi.com.tr
-
-# 11. DURUM KONTROL ET
-sudo systemctl status backend-template
-sudo systemctl status nginx
+# 8. Kontrol et
+sudo systemctl status PROJE_ADI
+curl https://DOMAIN_ADINIZ.com
 ```
-
-
 
 ---
 
 ## 🚨 6. Sorun Giderme
 
-### Nginx Sorunları
-```bash
-# Konfigürasyon hatası kontrolü
-sudo nginx -t
-
-# Nginx durumu
-sudo systemctl status nginx
-
-# Nginx yeniden başlatma
-sudo systemctl restart nginx
-
-# Port kullanım kontrolü
-sudo netstat -tlnp | grep :80
-sudo netstat -tlnp | grep :443
-
-# Nginx process kontrolü
-ps aux | grep nginx
-```
-
-### Backend Service Sorunları
-```bash
-# Detaylı hata mesajı
-sudo journalctl -u backend-template --no-pager -l
-
-# Servis durumu
-sudo systemctl status backend-template
-
-# Servis yeniden başlatma
-sudo systemctl restart backend-template
-
-# Port kullanımda mı?
-sudo netstat -tlnp | grep :4040
-
-# Process kontrol
-ps aux | grep main
-```
-
-### Load Balancing Sorunları
-```bash
-# Backend service durumu
-sudo systemctl status backend-template
-
-# Port kullanımda mı?
-sudo netstat -tlnp | grep :4040
-
-# Process kontrol
-ps aux | grep main
-```
-
-### SSL Sorunları
-```bash
-# SSL sertifika durumu
-sudo certbot certificates
-
-# SSL test
-curl -I https://template.hoi.com.tr
-
-# SSL yenileme test
-sudo certbot renew --dry-run
-
-# SSL logları
-sudo tail -f /var/log/letsencrypt/letsencrypt.log
-```
-
-### Yaygın Hatalar ve Çözümler
+### Yaygın Hatalar
 
 **502 Bad Gateway:**
 ```bash
 # Backend çalışıyor mu?
-sudo systemctl status backend-template
+sudo systemctl status PROJE_ADI
 
 # Port dinleniyor mu?
 sudo netstat -tlnp | grep :4040
-
-# Firewall engelliyor mu?
-sudo ufw status
 ```
 
-**403 Forbidden (Admin sayfasında):**
+**Port çakışması:**
 ```bash
-# IP whitelist kontrol et
-# Nginx konfigürasyonunda allow/deny satırlarını gözden geçir
+# Hangi process kullanıyor?
+sudo lsof -i :4040
 
-# Client IP'sini log'dan öğren
-sudo tail -f /var/log/nginx/template-hoi-access.log
+# Zorla durdur
+sudo fuser -k 4040/tcp
 ```
 
-**SSL sertifikası alınamıyor:**
+**SSL sorunu:**
 ```bash
-# Domain DNS ayarları doğru mu?
-nslookup template.hoi.com.tr
+# DNS doğru mu?
+nslookup DOMAIN_ADINIZ.com
 
-# Port 80 ve 443 açık mı?
-sudo ufw status
-sudo netstat -tlnp | grep -E ":(80|443)"
+# Sertifika durumu
+sudo certbot certificates
 ```
 
 ---
 
-## 🎯 Hızlı Referans Komutları
+## 🎯 Çoklu Proje Örneği
+
+Aynı sunucuda 3 proje:
+
+| Proje | Port | Domain | Servis |
+|-------|------|--------|--------|
+| API | 4040 | api.domain.com | api.service |
+| Admin | 5050 | admin.domain.com | admin.service |
+| User | 6060 | user.domain.com | user.service |
+
+Her proje için aynı adımları tekrarlayın, sadece port ve isim değiştirin.
+
+---
+
+## 💡 Hızlı Komutlar
 
 ```bash
-# Nginx
-sudo nginx -t                    # Konfigürasyon test
-sudo systemctl restart nginx    # Nginx yeniden başlat
-sudo tail -f /var/log/nginx/template-hoi-access.log
+# Nginx test ve restart
+sudo nginx -t && sudo systemctl restart nginx
 
-# Backend Service
-sudo systemctl restart backend-template
-sudo journalctl -u backend-template -f
-sudo systemctl status backend-template
+# Servis restart
+sudo systemctl restart PROJE_ADI
 
-# SSL
-sudo certbot renew --dry-run
-sudo certbot certificates
+# Logları canlı izle
+sudo journalctl -u PROJE_ADI -f
 
-# Network
+# Port kontrol
 sudo netstat -tlnp | grep :4040
-ps aux | grep main
+
+# SSL yenileme
+sudo certbot renew --dry-run
 ```
 
-Bu rehber sayesinde Ubuntu VPS'inizde profesyonel bir şekilde backend deployment yapabilir, load balancing, IP kısıtlaması ve cache optimizasyonları uygulayabilirsiniz.
+**Not:** Rate limiting, monitoring, backup gibi gelişmiş özellikler için uygulamanızın gereksinimlerine göre ek konfigürasyonlar yapabilirsiniz. Bu rehber sadece temel deployment için yeterlidir.
