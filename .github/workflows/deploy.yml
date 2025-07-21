@@ -7,14 +7,10 @@ on:
 
 env:
   PROJECT_DIR: "/root/2025-backend-template"
-  # Uygulamanın çalışabileceği portlar
   PORT_A: 4040
   PORT_B: 4041
-  # Sunucuda kaç eski versiyonun tutulacağı
   KEEP_RELEASES: 5
-  # Uygulamanızın sağlık kontrolü için endpoint'i
   HEALTH_CHECK_PATH: "/"
-  # Go build komutu
   BUILD_COMMAND: "/usr/local/go/bin/go build -o main ."
 
 jobs:
@@ -33,86 +29,77 @@ jobs:
           passphrase: ${{ secrets.PASSPHRASE }}
           port: ${{ secrets.PORT }}
           script: |
-            set -e # Herhangi bir komut başarısız olursa script'i durdur
+            set -e
 
-            # --- DEPLOYMENT DEĞİŞKENLERİNİ AYARLA ---
             RELEASES_DIR="${{ env.PROJECT_DIR }}/releases"
-            STATE_DIR="${{ env.PROJECT_DIR }}/state" # Canlı port ve PID gibi durum bilgileri için
+            STATE_DIR="${{ env.PROJECT_DIR }}/state"
             RELEASE_ID=$(date +%Y%m%d%H%M%S)
             RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
             LIVE_PORT_FILE="$STATE_DIR/live.port"
-            PID_FILE_PATH="$STATE_DIR/app.pid"
+            PID_STATE_FILE="$STATE_DIR/app.pid"
+            # NGINX İÇİN YENİ VE İZOLE EDİLMİŞ YOL
+            UPSTREAM_CONF_FILE="/etc/nginx/includes/backend_upstream.conf"
 
             echo "🚀 Deployment Başlatılıyor: Release ID $RELEASE_ID"
 
-            # Gerekli klasörleri oluştur
             mkdir -p $RELEASES_DIR
             mkdir -p $STATE_DIR
 
-            # --- 1. YENİ VERSİYONU HAZIRLA VE BUILD ET ---
             echo "⬇️  Kod Klonlanıyor ve Build Ediliyor..."
             git clone https://github.com/${{ github.repository }}.git $RELEASE_DIR
             cd $RELEASE_DIR
-            # .env dosyasını bir önceki versiyondan kopyala (varsa)
             if [ -f "${{ env.PROJECT_DIR }}/.env" ]; then
               cp "${{ env.PROJECT_DIR }}/.env" .
             fi
             ${{ env.BUILD_COMMAND }}
             echo "✅ Build tamamlandı."
 
-            # --- 2. YENİ PORTU BELİRLE ---
-            # Mevcut canlı portu oku, dosya yoksa varsayılan olarak PORT_A'yı kullan
             CURRENT_PORT=$(cat $LIVE_PORT_FILE || echo "${{ env.PORT_A }}")
-
-            if [ "$CURRENT_PORT" = "${{ env.PORT_A }}" ]; then
-              NEW_PORT=${{ env.PORT_B }}
-            else
-              NEW_PORT=${{ env.PORT_A }}
-            fi
+            NEW_PORT=$([ "$CURRENT_PORT" = "${{ env.PORT_A }}" ] && echo "${{ env.PORT_B }}" || echo "${{ env.PORT_A }}")
             echo "🔄 Port Değişimi: Mevcut Port: $CURRENT_PORT -> Yeni Port: $NEW_PORT"
 
-            # --- 3. YENİ UYGULAMAYI BAŞLAT VE TEST ET ---
-            echo "🩺 Yeni versiyon $NEW_PORT portunda sağlık kontrolü için başlatılıyor..."
-            # Komut: PORT'u ver, .env'deki diğer değişkenleri yükle ve uygulamayı arkaplanda başlat
-            (cd $RELEASE_DIR && PORT=$NEW_PORT nohup ./main &> app.log & echo $! > $PID_FILE_PATH)
+            echo "🩺 Yeni versiyon $NEW_PORT portunda başlatılıyor..."
+            # Yeni uygulamanın PID'sini kendi release klasöründe geçici olarak sakla
+            NEW_PID_TEMP_FILE="$RELEASE_DIR/app.pid"
+            (cd $RELEASE_DIR && PORT=$NEW_PORT nohup ./main &> app.log & echo $! > $NEW_PID_TEMP_FILE)
 
-            # Uygulamanın başlaması için bekle
-            sleep 10
+            sleep 10 # Uygulamanın başlaması için bekle
 
             HEALTH_CHECK_URL="http://localhost:$NEW_PORT${{ env.HEALTH_CHECK_PATH }}"
             echo "🔎 Sağlık kontrolü yapılıyor: $HEALTH_CHECK_URL"
-
             if ! curl -s --fail --retry 5 --retry-delay 3 $HEALTH_CHECK_URL; then
               echo "❌ Sağlık kontrolü BAŞARISIZ! Deployment geri alınıyor."
-              NEW_PID=$(cat $PID_FILE_PATH)
+              NEW_PID=$(cat $NEW_PID_TEMP_FILE)
               kill $NEW_PID
               rm -rf $RELEASE_DIR
               exit 1
             fi
             echo "✅ Sağlık kontrolü BAŞARILI."
 
-            # --- 4. NGINX'İ YENİ PORTA YÖNLENDİR (SOFT SWITCH) ---
+            # Eski sürecin PID'sini durum dosyasından oku
+            OLD_PID=$(cat $PID_STATE_FILE || echo "")
+
             echo "🔄 Nginx yeni porta yönlendiriliyor..."
-            echo "server 127.0.0.1:$NEW_PORT;" | sudo tee /etc/nginx/conf.d/backend_upstream.conf
-            sudo nginx -s reload # Bağlantıları kesmeden yeniden yükle
+            echo "server 127.0.0.1:$NEW_PORT;" | sudo tee $UPSTREAM_CONF_FILE
+            sudo nginx -s reload
             echo "✅ Nginx başarıyla $NEW_PORT portuna yönlendirildi."
 
-            # --- 5. ESKİ UYGULAMAYI DURDUR ---
-            # Eski PID'yi bul ve işlemi sonlandır
-            OLD_PID=$(ps aux | grep "[p]ort $CURRENT_PORT" | grep main | awk '{print $2}')
+            # Eski süreci PID'si ile güvenli bir şekilde durdur
             if [ -n "$OLD_PID" ]; then
-              echo "🛑 Eski versiyon (PID: $OLD_PID, Port: $CURRENT_PORT) durduruluyor..."
-              kill $OLD_PID
+                echo "🛑 Eski versiyon (PID: $OLD_PID, Port: $CURRENT_PORT) durduruluyor..."
+                if ps -p $OLD_PID > /dev/null; then
+                   kill $OLD_PID
+                   echo "✅ Eski süreç durduruldu."
+                else
+                   echo "ℹ️  Eski PID ($OLD_PID) zaten çalışmıyor."
+                fi
             else
-              echo "ℹ️  Eski versiyon zaten çalışmıyor."
+                echo "ℹ️  Durdurulacak eski bir süreç bulunamadı."
             fi
 
-            # --- 6. DURUMU GÜNCELLE VE TEMİZLİK YAP ---
-            # Canlı port bilgisini güncelle
+            # Durum dosyalarını yeni deploy için güncelle
             echo $NEW_PORT > $LIVE_PORT_FILE
-
-            # Yeni PID dosyasını kalıcı hale getir
-            mv $RELEASE_DIR/$PID_FILE_PATH $STATE_DIR/
+            mv $NEW_PID_TEMP_FILE $PID_STATE_FILE
 
             echo "🧹 Eski versiyonlar temizleniyor..."
             cd $RELEASES_DIR && ls -1tr | head -n -${{ env.KEEP_RELEASES }} | xargs -r rm -rf
