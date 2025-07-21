@@ -28,7 +28,6 @@ jobs:
           script: |
             set -e
 
-            # --- 1. DEPLOYMENT ORTAMINI HAZIRLA ---
             RELEASES_DIR="${{ env.PROJECT_ROOT }}/releases"
             STATE_DIR="${{ env.PROJECT_ROOT }}/state"
             RELEASE_ID=$(date +%Y%m%d%H%M%S)
@@ -38,88 +37,64 @@ jobs:
             UPSTREAM_CONF_FILE="/etc/nginx/includes/backend_upstream.conf"
 
             echo "🚀 Deployment Başlatılıyor: Release ID $RELEASE_ID"
+            mkdir -p $RELEASES_DIR $STATE_DIR
 
-            mkdir -p $RELEASES_DIR
-            mkdir -p $STATE_DIR
-
-            # --- 2. YENİ VERSİYONU İNDİR VE BUILD ET ---
-            echo "⬇️  Kod yeni release klasörüne klonlanıyor: $NEW_RELEASE_DIR"
+            echo "⬇️  Kod yeni release klasörüne klonlanıyor..."
             git clone https://github.com/${{ github.repository }}.git $NEW_RELEASE_DIR
             cd $NEW_RELEASE_DIR
 
-            # DÜZELTME: Ana .env dosyasını yeni release klasörüne kopyala
             echo "📋 Ana .env dosyası kopyalanıyor..."
             if [ -f "${{ env.PROJECT_ROOT }}/.env" ]; then
               cp "${{ env.PROJECT_ROOT }}/.env" .
               echo "✅ .env dosyası başarıyla kopyalandı."
             else
-              echo "⚠️ UYARI: Ana dizinde .env dosyası bulunamadı. Uygulama ortam değişkenleri olmadan başlayamayabilir."
+              echo "⚠️ UYARI: Ana dizinde .env dosyası bulunamadı."
             fi
 
             echo "🔨 Uygulama build ediliyor..."
             ${{ env.BUILD_COMMAND }}
             echo "✅ Build tamamlandı."
 
-            # --- 3. PORTLARI BELİRLE ---
             if [ -f "$LIVE_PORT_FILE" ]; then
               CURRENT_PORT=$(cat $LIVE_PORT_FILE)
             else
-              echo "ℹ️ 'live.port' dosyası bulunamadı. İlk deploy varsayılıyor."
               CURRENT_PORT=""
             fi
-
-            if [ "$CURRENT_PORT" = "${{ env.PORT_A }}" ]; then
-              NEW_PORT=${{ env.PORT_B }}
-            else
-              NEW_PORT=${{ env.PORT_A }}
-            fi
+            NEW_PORT=$([ "$CURRENT_PORT" = "${{ env.PORT_A }}" ] && echo "${{ env.PORT_B }}" || echo "${{ env.PORT_A }}")
             echo "🔄 Port Değişimi: Mevcut: '$CURRENT_PORT' -> Yeni Hedef: '$NEW_PORT'"
 
-            # --- 4. YENİ UYGULAMAYI BAŞLAT VE TEST ET ---
-            echo "🩺 Yeni versiyon $NEW_PORT portunda sağlık kontrolü için başlatılıyor..."
+            echo "🩺 Yeni versiyon $NEW_PORT portunda başlatılıyor..."
             (PORT=$NEW_PORT nohup ./main &> app.log & echo $! > ./app.pid.temp)
-
             sleep 8
-
             HEALTH_CHECK_URL="http://localhost:$NEW_PORT${{ env.HEALTH_CHECK_PATH }}"
             echo "🔎 Sağlık kontrolü yapılıyor: $HEALTH_CHECK_URL"
 
             if ! curl -s --fail --retry 3 --retry-delay 5 $HEALTH_CHECK_URL; then
               echo "❌ Sağlık kontrolü BAŞARISIZ! Deployment geri alınıyor."
-              # HATA AYIKLAMA: Neden başarısız olduğunu anlamak için log dosyasını yazdır
-              echo "--- UYGULAMA LOGLARI (app.log) ---"
-              cat app.log
-              echo "------------------------------------"
-
-              NEW_PID=$(cat ./app.pid.temp)
-              # Sadece PID varsa kill etmeye çalış
-              if [ -n "$NEW_PID" ]; then kill $NEW_PID || true; fi
+              echo "--- UYGULAMA LOGLARI (app.log) ---"; cat app.log; echo "---"
+              NEW_PID=$(cat ./app.pid.temp); if [ -n "$NEW_PID" ]; then kill $NEW_PID || true; fi
               rm -rf $NEW_RELEASE_DIR
               exit 1
             fi
             echo "✅ Sağlık kontrolü BAŞARILI."
 
-            # --- 5. NGINX'İ YENİ PORTA YÖNLENDİR ---
             echo "🔄 Nginx yeni porta yönlendiriliyor..."
             echo "server 127.0.0.1:$NEW_PORT;" | sudo tee $UPSTREAM_CONF_FILE
             sudo nginx -s reload
             echo "✅ Nginx başarıyla $NEW_PORT portuna yönlendirildi."
 
-            # --- 6. ESKİ UYGULAMAYI DURDUR ---
+            # İYİLEŞTİRME: Nginx'in geçişi tamamlaması için kısa bir bekleme süresi
+            echo "⏳ Eski süreci sonlandırmadan önce 1 saniye bekleniyor..."
+            sleep 1
+
             if [ -f "$LIVE_PID_FILE" ]; then
               OLD_PID=$(cat $LIVE_PID_FILE)
               echo "🛑 Eski versiyon (PID: $OLD_PID, Port: $CURRENT_PORT) durduruluyor..."
-              if ps -p $OLD_PID > /dev/null; then
-                 kill $OLD_PID
-                 echo "✅ Eski süreç durduruldu."
-              else
-                 echo "ℹ️ Eski PID ($OLD_PID) zaten çalışmıyor."
-              fi
+              if ps -p $OLD_PID > /dev/null; then kill $OLD_PID; echo "✅ Eski süreç durduruldu."; else echo "ℹ️ Eski PID ($OLD_PID) zaten çalışmıyor."; fi
             else
               echo "ℹ️ Durdurulacak eski bir süreç (PID dosyası) bulunamadı."
             fi
 
-            # --- 7. DURUMU GÜNCELLE VE TEMİZLİK YAP ---
             echo $NEW_PORT > $LIVE_PORT_FILE
             mv ./app.pid.temp $LIVE_PID_FILE
 
