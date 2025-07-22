@@ -1,7 +1,6 @@
 package StaticRoutesHandler
 
 import (
-	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +15,7 @@ func (h *Handler) IPTestEndpoint(c *gin.Context) {
 		"CF-Connecting-IP": c.Request.Header.Get("CF-Connecting-IP"),
 		"X-Forwarded-For":  c.Request.Header.Get("X-Forwarded-For"),
 		"X-Real-IP":        c.Request.Header.Get("X-Real-IP"),
+		"X-True-Client-IP": c.Request.Header.Get("X-True-Client-IP"),
 		"Cookie":           c.Request.Header.Get("Cookie"),
 	}
 
@@ -33,12 +33,6 @@ func (h *Handler) IPTestEndpoint(c *gin.Context) {
 			"timestamp":     time.Now().Format(time.RFC3339),
 		},
 	}
-
-	// Log da at ki console'da görebilelim
-	log.Printf("[IP-TEST] Client: %s | CF: %s | X-Forwarded-For: %s",
-		clientIP,
-		headers["CF-Connecting-IP"],
-		headers["X-Forwarded-For"])
 
 	c.JSON(200, response)
 }
