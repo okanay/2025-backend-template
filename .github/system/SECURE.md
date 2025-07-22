@@ -95,15 +95,26 @@ sudo nano /etc/nginx/nginx.conf
 http {
     # ... mevcut diğer ayarlarınız ...
 
-    # --- IP BLOKLAMA HARİTASI ---
-    # Cloudflare'den gelen gerçek kullanıcı IP'sini ($http_cf_connecting_ip) alır.
-    # Bu IP, blocklist.conf dosyasındaki bir IP ile eşleşirse, $is_blocked değişkenine "1" değerini atar.
-    # Eşleşmezse, varsayılan olarak "0" değerini atar. Bu işlem son derece performanslıdır.
-    map $http_cf_connecting_ip $is_blocked {
+    # 1. Gerçek Müşteri IP'sini Belirleme Haritası
+    # Bu map, öncelikle özel X-True-Client-IP başlığına bakar.
+    # Eğer o başlık yoksa veya boşsa, standart CF-Connecting-IP başlığını kullanır.
+    # Böylece $real_client_ip değişkeni her zaman doğru IP'yi içerir.
+    map $http_x_true_client_ip $real_client_ip {
+        default $http_cf_connecting_ip; # Varsayılan: Standart Cloudflare IP
+        ~.      $http_x_true_client_ip;      # Eğer doluysa: Özel başlığı kullan
+    }
+
+    # 2. Engelleme Karar Haritası
+    # Bu map, artık güvenilir olan $real_client_ip değişkenini kullanarak
+    # blocklist.conf dosyasını kontrol eder ve $is_blocked değişkenini ayarlar.
+    map $real_client_ip $is_blocked {
         default 0;
         include /etc/nginx/blocklist.conf;
     }
-    # ---------------------------
+        # ------------------------------------
+
+        include /etc/nginx/conf.d/*.conf;
+        include /etc/nginx/sites-enabled/*;
 
     include /etc/nginx/sites-enabled/*;
     # ...
